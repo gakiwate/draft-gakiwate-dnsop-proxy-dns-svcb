@@ -2,14 +2,14 @@
 
 
 
-WG Working Group                                              Y. N. Here
-Internet-Draft                                    Your Organization Here
-Intended status: Informational                           3 November 2025
-Expires: 7 May 2026
+WG Working Group                                              G. Akiwate
+Internet-Draft                                                  T. Pauly
+Intended status: Standards Track                               Apple Inc
+Expires: 7 May 2026                                      3 November 2025
 
 
-                           TODO - Your title
-                  draft-todo-yourname-protocol-latest
+          HTTP Proxy-Status Parameter for DNS SVCB Information
+                  draft-gakiwate-dnsop-proxy-dns-svcb
 
 Abstract
 
@@ -21,8 +21,8 @@ About This Document
 
    The latest revision of this draft can be found at
    https://example.com/LATEST.  Status information for this document may
-   be found at https://datatracker.ietf.org/doc/draft-todo-yourname-
-   protocol/.
+   be found at https://datatracker.ietf.org/doc/draft-gakiwate-dnsop-
+   proxy-dns/.
 
    Discussion of this document takes place on the WG Working Group
    mailing list (mailto:WG@example.com), which is archived at
@@ -70,7 +70,7 @@ Table of Contents
    4.  IANA Considerations
    5.  Normative References
    Acknowledgments
-   Author's Address
+   Authors' Addresses
 
 1.  Introduction
 
@@ -107,8 +107,13 @@ Acknowledgments
 
    TODO acknowledge.
 
-Author's Address
+Authors' Addresses
 
-   Your Name Here
-   Your Organization Here
-   Email: your.email@example.com
+   Gautam Akiwate
+   Apple Inc
+   Email: gakiwate@apple.com
+
+
+   Tommy Pauly
+   Apple Inc
+   Email: tpauly@apple.com
