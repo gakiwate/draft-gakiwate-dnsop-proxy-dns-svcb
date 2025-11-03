@@ -19,11 +19,10 @@
 # Change the file extension to match the format (.xml for XML, etc...)
 #
 ###
-title: "TODO - Your title"
-abbrev: "TODO - Abbreviation"
-category: info
+title: "HTTP Proxy-Status Parameter for DNS SVCB Information"
+category: std
 
-docname: draft-todo-yourname-protocol-latest
+docname: draft-gakiwate-dnsop-proxy-dns-svcb
 submissiontype: IETF  # also: "independent", "editorial", "IAB", or "IRTF"
 number:
 date:
@@ -45,9 +44,13 @@ venue:
 
 author:
  -
-    fullname: Your Name Here
-    organization: Your Organization Here
-    email: your.email@example.com
+    fullname: Gautam Akiwate
+    organization: Apple Inc
+    email: "gakiwate@apple.com"
+ -
+    fullname: Tommy Pauly
+    organization: Apple Inc
+    email: "tpauly@apple.com"
 
 normative:
 
