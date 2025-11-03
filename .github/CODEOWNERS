@@ -1,0 +1,3 @@
+# Automatically generated CODEOWNERS
+# Regenerate with `make update-codeowners`
+draft-gakiwate-dnsop-proxy-dns-svcb.md gakiwate@apple.com tpauly@apple.com
