@@ -2,34 +2,45 @@
 
 
 
-WG Working Group                                              G. Akiwate
+Domain Name System Operations                                 G. Akiwate
 Internet-Draft                                                  T. Pauly
 Intended status: Standards Track                               Apple Inc
-Expires: 7 May 2026                                      3 November 2025
+Expires: 24 October 2026                                   22 April 2026
 
 
-          HTTP Proxy-Status Parameter for DNS SVCB Information
-                  draft-gakiwate-dnsop-proxy-dns-svcb
+          HTTP Header Fields for Proxying DNS SVCB Information
+               draft-gakiwate-dnsop-proxy-dns-svcb-latest
 
 Abstract
 
-   TODO Abstract
+   This document defines a mechanism for utilizing Service Binding (SVCB
+   and HTTPS) DNS records in environments where clients connect to
+   application servers via HTTP proxies.  In such deployments, the
+   proxy, rather than the client, performs the DNS resolution.  To
+   support this model, this document specifies a set of HTTP header
+   fields that enable proxies to convey SVCB / HTTPS RRs received from
+   the resolution.  This mechanism allows clients to benefit from SVCB-
+   based service discovery and configuration (e.g., alternative
+   endpoints, ALPN, or transport hints) while preserving existing
+   privacy constraints.
 
 About This Document
 
    This note is to be removed before publishing as an RFC.
 
    The latest revision of this draft can be found at
-   https://example.com/LATEST.  Status information for this document may
-   be found at https://datatracker.ietf.org/doc/draft-gakiwate-dnsop-
-   proxy-dns/.
+   https://gakiwate.github.io/draft-gakiwate-dnsop-proxy-dns-svcb/draft-
+   gakiwate-dnsop-proxy-dns-svcb.html.  Status information for this
+   document may be found at https://datatracker.ietf.org/doc/draft-
+   gakiwate-dnsop-proxy-dns-svcb/.
 
-   Discussion of this document takes place on the WG Working Group
-   mailing list (mailto:WG@example.com), which is archived at
-   https://example.com/WG.
+   Discussion of this document takes place on the Domain Name System
+   Operations Working Group mailing list (mailto:dnsop@ietf.org), which
+   is archived at https://mailarchive.ietf.org/arch/browse/dnsop/.
+   Subscribe at https://www.ietf.org/mailman/listinfo/dnsop/.
 
    Source for this draft and an issue tracker can be found at
-   https://github.com/USER/REPO.
+   https://github.com/gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb.
 
 Status of This Memo
 
@@ -46,11 +57,11 @@ Status of This Memo
    time.  It is inappropriate to use Internet-Drafts as reference
    material or to cite them other than as "work in progress."
 
-   This Internet-Draft will expire on 7 May 2026.
+   This Internet-Draft will expire on 24 October 2026.
 
 Copyright Notice
 
-   Copyright (c) 2025 IETF Trust and the persons identified as the
+   Copyright (c) 2026 IETF Trust and the persons identified as the
    document authors.  All rights reserved.
 
    This document is subject to BCP 78 and the IETF Trust's Legal
@@ -66,15 +77,55 @@ Table of Contents
 
    1.  Introduction
    2.  Conventions and Definitions
-   3.  Security Considerations
-   4.  IANA Considerations
-   5.  Normative References
+   3.  Structured HTTP Header Fields for Proxying SVCB Information
+     3.1.  Client Structured HTTP Header Fields
+       3.1.1.  Proxy-DNS-SVCB-Request
+       3.1.2.  Proxy-DNS-SVCB-Request-Close-On
+       3.1.3.  Example
+     3.2.  Proxy Structured HTTP Header Fields
+       3.2.1.  Proxy-DNS-SVCB-Response
+       3.2.2.  Proxy-DNS-SVCB-Response-Closed-On
+     3.3.  Processing Considerations
+       3.3.1.  Client Processing Considerations
+       3.3.2.  Proxy Processing Considerations
+   4.  Examples
+     4.1.  Scenario 1: Successful CONNECT with SVCB Parameters
+           Returned
+       4.1.1.  Scenario 2: Close-On Triggered, Client Retries with
+               CONNECT-UDP
+     4.2.  Scenario 3: Multiple RRs with Different Priorities
+   5.  Security Considerations
+   6.  IANA Considerations
+   7.  TODO List
+   8.  Normative References
    Acknowledgments
    Authors' Addresses
 
 1.  Introduction
 
-   TODO Introduction
+   The CONNECT method [RFC7231] and the CONNECT-UDP method [RFC9298] are
+   HTTP request methods that allow clients to establish TCP or UDP flows
+   to target servers via an HTTP proxy.  Clients identify the target
+   using authority-form (Section 5.3 of [RFC7230]), which includes the
+   server name or IP address and an associated port number.  When the
+   target is specified by name, the proxy resolves the name to an IPv4
+   or IPv6 address using A or AAAA queries.
+
+   However, this arrangement prevents clients from using Service Binding
+   (SVCB or HTTPS) RRs [RFC9460], which increasingly carry important
+   configuration information that influences how connections should be
+   formed.  For example, SVCB records may indicate that a target server
+   supports h3, enabling the client to use CONNECT-UDP immediately.
+   Similarly, SVCB records may indicate support for Encrypted Client
+   Hello (ech), which could affect how the client initiates the
+   connection to the target server.
+
+   Although clients could, in principle, perform their own SVCB
+   resolution, this is often impractical in deployed environments due to
+   privacy constraints or performance considerations.  To that end, this
+   document specifies HTTP header fields that allow proxy servers to
+   relay information obtained from Service Binding (SVCB and HTTPS)
+   records to clients when handling CONNECT or CONNECT-UDP requests.
 
 2.  Conventions and Definitions
 
@@ -84,24 +135,387 @@ Table of Contents
    BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
    capitals, as shown here.
 
-3.  Security Considerations
+3.  Structured HTTP Header Fields for Proxying SVCB Information
+
+3.1.  Client Structured HTTP Header Fields
+
+3.1.1.  Proxy-DNS-SVCB-Request
+
+   Clients can request SVCB parameters with the Structured Header
+   [RFC8941] "Proxy-DNS-SVCB-Request".  The value MUST be an sf-list
+   whose members are sf-integer items that MUST NOT contain parameters.
+   Each list member corresponds to the numeric version of an
+   SvcParamKey.  For example, a client wanting to receive ALPN and ECH
+   Config parameters would send a request for 1 (alpn) and 5
+   (echconfig).
+
+   proxy-dns-svcb-request = 1, 5
+
+3.1.2.  Proxy-DNS-SVCB-Request-Close-On
+
+   The "Proxy-DNS-SVCB-Request-Close-On" header field is a Structured
+   Header [RFC8941] that indicate conditions if met should trigger a
+   close on the request.
+
+   The header value in this case is a list of tokens.  This set of
+   tokens should ideally be pre-defined and agreed upon by the client
+   and the proxy.  In this document, we define two token values.
+
+   Proxy-DNS-SVCB-Request-Close-On= sf-list
+
+3.1.2.1.  Defined Token Values
+
+   The following tokens are defined for the "Proxy-DNS-SVCB-Request-
+   Close-On" header:
+
+   h3-alpn: This token indicates that the client requests the proxy
+   should close the connection if the ALPN (Application-Layer Protocol
+   Negotiation) field in DNS SVCB/HTTPS records for the target contains
+   the "h3" protocol identifier.  A client may choose to add this token
+   if it prefers CONNECT-UDP over CONNECT.
+
+   ech-defined: This token indicates that client requests that the proxy
+   should close the connection if the ECH (Encrypted Client Hello)
+   SvcParamKey is present in DNS SVCB/HTTPS records for the target.  A
+   client may choose to add this token if it prefers to use ECH when
+   connecting to the target.
+
+   proxy-dns-svcb-request-close-on: h3-alpn
+   proxy-dns-svcb-request-close-on: ech-defined
+   proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
+
+3.1.3.  Example
+
+   HEADERS
+   :method = CONNECT
+   :authority = svc.example.com:443
+   proxy-dns-svcb-request = 1, 5
+   proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
+
+   In this example, the client is requesting the proxy communicate back
+   the ALPN and ECH SvcParamKey values of the target's SVCB/HTTPS RRs.
+   The client is also requesting that if the target supports H3 or ECH
+   then it should close the connection attempt so that the client may
+   reattempt.
+
+3.2.  Proxy Structured HTTP Header Fields
+
+3.2.1.  Proxy-DNS-SVCB-Response
+
+   A proxy MAY include the "Proxy-DNS-SVCB-Response" Structured Header
+   [RFC8941] in a CONNECT or CONNECT-UDP response to convey the SVCB/
+   HTTPS RRset resolved for the target authority.  The "Proxy-DNS-SVCB-
+   Response" header field is a Structured Field [RFC8941] of type sf-
+   list.  Each member of the list is an sf-inner-list representing a
+   single SVCB/HTTPS RR, and the list as a whole represents the full
+   RRset.
+
+   Each inner list MUST carry the following parameters:
+
+   *  *priority*: an sf-integer corresponding to the SvcPriority field
+      of the RR as defined in [RFC9460].
+
+   *  *target*: an sf-string corresponding to the TargetName field of
+      the RR as defined in [RFC9460].
+
+   Additionally, every member of the inner list is an sf-integer
+   corresponding to the numeric identifier of a SvcParamKey as defined
+   in [RFC9460].  Each such member MAY carry a single parameter whose
+   name is "value" and whose value is an sf-binary item containing the
+   wire-format encoding of the corresponding SvcParamValue as defined in
+   [RFC9460].  A SvcParamKey MUST appear at most once within a given
+   inner list.
+
+   For AliasMode records (SvcPriority 0), the inner list MUST be empty,
+   as AliasMode RRs do not carry SvcParams.  The "target" parameter MUST
+   convey the alias target name.
+
+   A proxy SHOULD restrict the SvcParams conveyed in each inner list to
+   only the SvcParamKeys enumerated in the client's "Proxy-DNS-SVCB-
+   Request" header field.  If the proxy was unable to perform SVCB
+   resolution, or if resolution returned no SVCB/HTTPS RRs for the
+   target, the proxy MUST include the header field with an empty list.
+
+   proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc1.example.com",
+                             (1;value=:bmkK:);priority=2;target="svc2.example.com"
+
+   proxy-dns-svcb-response = ();priority=0;target="alias.example.com"
+
+   proxy-dns-svcb-response =
+
+   Clients MUST NOT rely on the presence of specific SvcParamKeys in the
+   response.  If the header field is absent, the client SHOULD treat the
+   SVCB/HTTPS parameter set for the target as unknown.
+
+3.2.2.  Proxy-DNS-SVCB-Response-Closed-On
+
+   The "Proxy-DNS-SVCB-Response-Closed-On" header field is a Structured
+   Field [RFC8941] of type sf-list.  Each member of the list is an sf-
+   token corresponding to a token defined in Section XX (Defined Token
+   Values) that was present in the client's "Proxy-DNS-SVCB-Request-
+   Close-On" header field and whose condition was evaluated as satisfied
+   by the proxy.
+
+   A proxy MUST include this header field when it closes a request in
+   response to a satisfied condition from the client's "Proxy-DNS-SVCB-
+   Request-Close-On" header field.  The proxy MUST report all tokens
+   whose conditions were satisfied.  The proxy MUST NOT include tokens
+   that were absent from the client's "Proxy-DNS-SVCB-Request-Close-On"
+   request, and MUST NOT include tokens whose conditions were not
+   satisfied.
+
+   proxy-dns-svcb-response-closed-on: h3-alpn
+   proxy-dns-svcb-response-closed-on: ech-defined
+   proxy-dns-svcb-response-closed-on: h3-alpn, ech-defined
+
+3.3.  Processing Considerations
+
+3.3.1.  Client Processing Considerations
+
+   A client that wishes to receive SVCB/HTTPS parameters from the proxy
+   SHOULD include the "Proxy-DNS-SVCB-Request" header field in its
+   CONNECT or CONNECT-UDP request, enumerating the SvcParamKeys it is
+   interested in.  A client MAY additionally include the "Proxy-DNS-
+   SVCB-Request-Close-On" header field to request that the proxy close
+   the connection if specific conditions are satisfied.
+
+   Upon receipt of a "Proxy-DNS-SVCB-Response" header field, the client
+   SHOULD use the conveyed RRset to inform how it establishes the
+   connection to the target, respecting the SvcPriority ordering of the
+   records as defined in [RFC9460].  If the header field is present but
+   contains an empty list, the client SHOULD treat the SVCB/HTTPS RRset
+   for the target as unknown.  If the header field is absent, the client
+   SHOULD treat the SVCB/HTTPS RRset for the target as unknown.
+
+   Upon receipt of a "Proxy-DNS-SVCB-Response-Closed-On" header field,
+   the client SHOULD inspect the tokens present and use them, in
+   conjunction with the parameters conveyed in the "Proxy-DNS-SVCB-
+   Response" header field, to determine an appropriate retry strategy.
+   For example:
+
+   *  If the token "h3-alpn" is present, the client SHOULD reattempt the
+      connection using CONNECT-UDP rather than CONNECT, using the ALPN
+      and other SvcParam values from the highest priority RR conveyed in
+      the "Proxy-DNS-SVCB-Response" header field.
+
+   *  If the token "ech-defined" is present, the client SHOULD reattempt
+      the connection using Encrypted Client Hello, using the ECH keys
+      from the highest priority RR conveyed in the "Proxy-DNS-SVCB-
+      Response" header field.
+
+   If the "Proxy-DNS-SVCB-Response" header field is absent in a response
+   containing "Proxy-DNS-SVCB-Response-Closed-On", the client SHOULD
+   perform its own SVCB resolution before reattempting the connection.
+
+3.3.2.  Proxy Processing Considerations
+
+   Support for the "Proxy-DNS-SVCB-Request" and "Proxy-DNS-SVCB-Request-
+   Close-On" header fields is OPTIONAL.  A proxy that does not support
+   these header fields MUST ignore them and MUST continue processing the
+   CONNECT or CONNECT-UDP request as if they were absent.
+
+   A proxy that supports the "Proxy-DNS-SVCB-Request" header field
+   SHOULD perform SVCB/HTTPS resolution for the target authority and
+   SHOULD include the "Proxy-DNS-SVCB-Response" header field in its
+   response, restricted to the SvcParamKeys enumerated in the client's
+   request.  If the proxy was unable to perform SVCB resolution, or if
+   resolution returned no SVCB/HTTPS RRs for the target, the proxy MUST
+   include the "Proxy-DNS-SVCB-Response" header field with an empty
+   list.
+
+   A proxy that supports the "Proxy-DNS-SVCB-Request-Close-On" header
+   field MUST evaluate each recognized token against the resolved SVCB/
+   HTTPS RRset prior to establishing the forwarded connection to the
+   target.  Token evaluation MUST be performed as follows:
+
+   *  *h3-alpn*: The proxy MUST evaluate this token against only the
+      highest priority RR in the resolved RRset, i.e., the RR with the
+      lowest non-zero SvcPriority value.  The condition is satisfied if
+      the ALPN SvcParamKey of that RR contains the "h3" protocol
+      identifier.  AliasMode records (SvcPriority 0) MUST be followed
+      before evaluation.
+
+   *  *ech-defined*: The proxy MUST evaluate this token against only the
+      highest priority RR in the resolved RRset.  The condition is
+      satisfied if the ECH SvcParamKey is present in that RR.
+
+   New tokens MAY be defined in future documents to address evaluation
+   against other RRs in the RRset, or to define alternative evaluation
+   semantics.  For example, a future token could be defined to trigger
+   closure if any RR in the RRset satisfies a condition, rather than
+   only the highest priority RR.  Unknown tokens MUST be silently
+   ignored.
+
+   If one or more recognized conditions are satisfied, the proxy SHOULD
+   NOT establish the forwarded connection and SHOULD instead close the
+   request, including the "Proxy-DNS-SVCB-Response-Closed-On" header
+   field indicating the tokens that triggered the closure.  The proxy
+   SHOULD also include the "Proxy-DNS-SVCB-Response" header field
+   populated with the resolved RRset, allowing the client to reattempt
+   the connection without requiring an additional resolution step.
+
+   A proxy MUST silently ignore any tokens in "Proxy-DNS-SVCB-Request-
+   Close-On" that it does not recognize.  The order in which tokens
+   appear in the list does not indicate precedence; all recognized
+   tokens are evaluated independently, and the presence of any single
+   satisfied condition is sufficient to trigger closure.
+
+4.  Examples
+
+4.1.  Scenario 1: Successful CONNECT with SVCB Parameters Returned
+
+   The client sends a CONNECT request requesting ALPN and ECH
+   parameters:
+
+   REQUEST HEADERS
+   :method = CONNECT
+   :authority = svc.example.com:443
+   proxy-dns-svcb-request = 1, 5
+
+   The proxy performs SVCB/HTTPS resolution for svc.example.com and
+   finds a single RR indicating support for h2 in the ALPN SvcParamKey
+   and an ECH configuration.  The proxy establishes the forwarded
+   connection and responds successfully, conveying the resolved SVCB
+   parameters:
+
+   RESPONSE HEADERS
+   :status = 200
+   proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc.example.com"
+
+   The client uses the conveyed ALPN and ECH values to inform how it
+   establishes the connection to the target.
+
+4.1.1.  Scenario 2: Close-On Triggered, Client Retries with CONNECT-UDP
+
+   The client sends a CONNECT request, requesting ALPN parameters and
+   indicating that the connection should be closed if the target
+   supports h3:
+
+   REQUEST HEADERS
+   :method = CONNECT
+   :authority = svc.example.com:443
+   proxy-dns-svcb-request = 1
+   proxy-dns-svcb-request-close-on: h3-alpn
+
+   The proxy performs SVCB/HTTPS resolution for svc.example.com and
+   finds that the highest priority RR contains h3 in the ALPN
+   SvcParamKey.  The condition specified in the "Proxy-DNS-SVCB-Request-
+   Close-On" header field is satisfied.  The proxy does not establish a
+   forwarded connection and instead responds with the satisfied
+   condition and the resolved SVCB parameters:
+
+   RESPONSE HEADERS
+   :status = 307
+   proxy-dns-svcb-response-closed-on: h3-alpn
+   proxy-dns-svcb-response = (1;value=:aGkK:);priority=1;target="svc.example.com"
+
+   Upon receipt of the "Proxy-DNS-SVCB-Response-Closed-On" header field,
+   the client observes that the h3-alpn condition was satisfied.  Using
+   the ALPN values conveyed in the "Proxy-DNS-SVCB-Response" header
+   field, the client reattempts the connection using CONNECT-UDP:
+
+   REQUEST HEADERS
+   :method = CONNECT-UDP
+   :authority = svc.example.com:443
+   proxy-dns-svcb-request = 1
+
+   The proxy establishes the forwarded connection and responds
+   successfully:
+
+   RESPONSE HEADERS
+   :status = 200
+   proxy-dns-svcb-response = (1;value=:aGkK:);priority=1;target="svc.example.com"
+
+4.2.  Scenario 3: Multiple RRs with Different Priorities
+
+   The client sends a CONNECT request requesting ALPN and ECH
+   parameters:
+
+   REQUEST HEADERS
+   :method = CONNECT
+   :authority = svc.example.com:443
+   proxy-dns-svcb-request = 1, 5
+   proxy-dns-svcb-request-close-on: h3-alpn
+
+   The proxy performs SVCB/HTTPS resolution for svc.example.com and
+   finds two RRs with different priorities:
+
+   svc.example.com. 300 IN HTTPS 1 svc1.example.com. alpn=h2,h3 ech=...
+   svc.example.com. 300 IN HTTPS 2 svc2.example.com. alpn=h2
+
+   The highest priority RR (priority 1) indicates support for h3 in the
+   ALPN SvcParamKey.  The h3-alpn condition is therefore satisfied.  The
+   proxy does not establish a forwarded connection and responds with the
+   full RRset and the satisfied condition:
+
+   RESPONSE HEADERS
+   :status = 307
+   proxy-dns-svcb-response-closed-on: h3-alpn
+   proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc1.example.com",
+                             (1;value=:bmkK:);priority=2;target="svc2.example.com"
+
+   Upon receipt of the "Proxy-DNS-SVCB-Response-Closed-On" header field,
+   the client observes that the h3-alpn condition was satisfied.  The
+   client selects the highest priority RR and reattempts the connection
+   using CONNECT-UDP to svc1.example.com:
+
+   REQUEST HEADERS
+   :method = CONNECT-UDP
+   :authority = svc1.example.com:443
+   proxy-dns-svcb-request = 1, 5
+
+   The proxy establishes the forwarded connection and responds
+   successfully:
+
+   RESPONSE HEADERS
+   :status = 200
+   proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc1.example.com"
+
+5.  Security Considerations
 
    TODO Security
 
-4.  IANA Considerations
+6.  IANA Considerations
 
    This document has no IANA actions.
 
-5.  Normative References
+7.  TODO List
+
+   Interaction with rfc9532 h3-alpn cannot be used with CONNECT-UDP
+
+8.  Normative References
 
    [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
               Requirement Levels", BCP 14, RFC 2119,
               DOI 10.17487/RFC2119, March 1997,
               <https://www.rfc-editor.org/rfc/rfc2119>.
 
+   [RFC7230]  Fielding, R., Ed. and J. Reschke, Ed., "Hypertext Transfer
+              Protocol (HTTP/1.1): Message Syntax and Routing",
+              RFC 7230, DOI 10.17487/RFC7230, June 2014,
+              <https://www.rfc-editor.org/rfc/rfc7230>.
+
+   [RFC7231]  Fielding, R., Ed. and J. Reschke, Ed., "Hypertext Transfer
+              Protocol (HTTP/1.1): Semantics and Content", RFC 7231,
+              DOI 10.17487/RFC7231, June 2014,
+              <https://www.rfc-editor.org/rfc/rfc7231>.
+
    [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
               2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
               May 2017, <https://www.rfc-editor.org/rfc/rfc8174>.
+
+   [RFC8941]  Nottingham, M. and P. Kamp, "Structured Field Values for
+              HTTP", RFC 8941, DOI 10.17487/RFC8941, February 2021,
+              <https://www.rfc-editor.org/rfc/rfc8941>.
+
+   [RFC9298]  Schinazi, D., "Proxying UDP in HTTP", RFC 9298,
+              DOI 10.17487/RFC9298, August 2022,
+              <https://www.rfc-editor.org/rfc/rfc9298>.
+
+   [RFC9460]  Schwartz, B., Bishop, M., and E. Nygren, "Service Binding
+              and Parameter Specification via the DNS (SVCB and HTTPS
+              Resource Records)", RFC 9460, DOI 10.17487/RFC9460,
+              November 2023, <https://www.rfc-editor.org/rfc/rfc9460>.
 
 Acknowledgments
 
