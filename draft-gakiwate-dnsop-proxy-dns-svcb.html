@@ -8,14 +8,16 @@
 <meta content="Gautam Akiwate" name="author">
 <meta content="Tommy Pauly" name="author">
 <meta content="
-       This document defines a mechanism for utilizing Service Binding (SVCB and HTTPS)
-DNS records in environments where clients connect to application servers via
-HTTP proxies. In such deployments, the proxy, rather than the client, performs
-the DNS resolution. To support this model, this document specifies a set of HTTP
-header fields that enable proxies to convey SVCB / HTTPS RRs received from the
-resolution.  This mechanism allows clients to benefit from SVCB-based service
-discovery and configuration (e.g., alternative endpoints, ALPN, or transport
-hints) while preserving existing privacy constraints. 
+       When HTTP clients use the CONNECT or CONNECT-UDP methods to reach target servers
+through a proxy, the proxy performs DNS resolution on behalf of the client. This
+prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
+that carry service configuration such as supported protocols and Encrypted
+Client Hello keys. This document defines HTTP header fields that enable the
+proxy to relay SVCB information to the client, describes how the proxy can act
+on SVCB/HTTPS data when establishing the forwarded connection, and introduces a
+conditional early closure mechanism that allows the client to coordinate with
+the proxy to abort a connection when specific SVCB parameters are present, so
+that the client can retry with a different connection strategy. 
     " name="description">
 <meta content="xml2rfc 3.33.0" name="generator">
 <meta content="draft-gakiwate-dnsop-proxy-dns-svcb-latest" name="ietf.draft">
@@ -30,8 +32,8 @@ hints) while preserving existing privacy constraints.
     platformdirs 4.9.6
     pycountry 24.6.1
     PyYAML 6.0.3
-    requests 2.32.5
-    wcwidth 0.6.0
+    requests 2.33.1
+    wcwidth 0.7.0
 -->
 <link href="draft-gakiwate-dnsop-proxy-dns-svcb.xml" rel="alternate" type="application/rfc+xml">
 <link href="#copyright" rel="license">
@@ -1052,11 +1054,11 @@ svg :is([fill="white"], [fill^="#fff"]) {
 <thead><tr>
 <td class="left">Internet-Draft</td>
 <td class="center">HTTP Header Fields for Proxying DNS SVCB</td>
-<td class="right">April 2026</td>
+<td class="right">May 2026</td>
 </tr></thead>
 <tfoot><tr>
 <td class="left">Akiwate &amp; Pauly</td>
-<td class="center">Expires 24 October 2026</td>
+<td class="center">Expires 16 November 2026</td>
 <td class="right">[Page]</td>
 </tr></tfoot>
 </table>
@@ -1069,12 +1071,12 @@ svg :is([fill="white"], [fill^="#fff"]) {
 <dd class="internet-draft">draft-gakiwate-dnsop-proxy-dns-svcb-latest</dd>
 <dt class="label-published">Published:</dt>
 <dd class="published">
-<time datetime="2026-04-22" class="published">22 April 2026</time>
+<time datetime="2026-05-15" class="published">15 May 2026</time>
     </dd>
 <dt class="label-intended-status">Intended Status:</dt>
 <dd class="intended-status">Standards Track</dd>
 <dt class="label-expires">Expires:</dt>
-<dd class="expires"><time datetime="2026-10-24">24 October 2026</time></dd>
+<dd class="expires"><time datetime="2026-11-16">16 November 2026</time></dd>
 <dt class="label-authors">Authors:</dt>
 <dd class="authors">
 <div class="author">
@@ -1091,14 +1093,16 @@ svg :is([fill="white"], [fill^="#fff"]) {
 <h1 id="title">HTTP Header Fields for Proxying DNS SVCB Information</h1>
 <section id="section-abstract">
       <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
-<p id="section-abstract-1">This document defines a mechanism for utilizing Service Binding (SVCB and HTTPS)
-DNS records in environments where clients connect to application servers via
-HTTP proxies. In such deployments, the proxy, rather than the client, performs
-the DNS resolution. To support this model, this document specifies a set of HTTP
-header fields that enable proxies to convey SVCB / HTTPS RRs received from the
-resolution.  This mechanism allows clients to benefit from SVCB-based service
-discovery and configuration (e.g., alternative endpoints, ALPN, or transport
-hints) while preserving existing privacy constraints.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+<p id="section-abstract-1">When HTTP clients use the CONNECT or CONNECT-UDP methods to reach target servers
+through a proxy, the proxy performs DNS resolution on behalf of the client. This
+prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
+that carry service configuration such as supported protocols and Encrypted
+Client Hello keys. This document defines HTTP header fields that enable the
+proxy to relay SVCB information to the client, describes how the proxy can act
+on SVCB/HTTPS data when establishing the forwarded connection, and introduces a
+conditional early closure mechanism that allows the client to coordinate with
+the proxy to abort a connection when specific SVCB parameters are present, so
+that the client can retry with a different connection strategy.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
 </section>
 <section class="note rfcEditorRemove" id="section-note.1">
       <h2 id="name-about-this-document">
@@ -1135,7 +1139,7 @@ hints) while preserving existing privacy constraints.<a href="#section-abstract-
         time. It is inappropriate to use Internet-Drafts as reference
         material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
 <p id="section-boilerplate.1-4">
-        This Internet-Draft will expire on 24 October 2026.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+        This Internet-Draft will expire on 16 November 2026.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
 </section>
 </div>
 <div id="copyright">
@@ -1171,79 +1175,129 @@ hints) while preserving existing privacy constraints.<a href="#section-abstract-
             <p id="section-toc.1-1.2.1" class="keepWithNext"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-conventions-and-definitions" class="internal xref">Conventions and Definitions</a></p>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
-            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-structured-http-header-fiel" class="internal xref">Structured HTTP Header Fields for Proxying SVCB Information</a></p>
+            <p id="section-toc.1-1.3.1"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-requesting-and-receiving-sv" class="internal xref">Requesting and Receiving SVCB Information</a></p>
 <ul class="compact toc ulBare ulEmpty">
 <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1">
-                <p id="section-toc.1-1.3.2.1.1"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-client-structured-http-head" class="internal xref">Client Structured HTTP Header Fields</a></p>
-<ul class="compact toc ulBare ulEmpty">
-<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1.2.1">
-                    <p id="section-toc.1-1.3.2.1.2.1.1" class="keepWithNext"><a href="#section-3.1.1" class="auto internal xref">3.1.1</a>.  <a href="#name-proxy-dns-svcb-request" class="internal xref">Proxy-DNS-SVCB-Request</a></p>
-</li>
-                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1.2.2">
-                    <p id="section-toc.1-1.3.2.1.2.2.1"><a href="#section-3.1.2" class="auto internal xref">3.1.2</a>.  <a href="#name-proxy-dns-svcb-request-clos" class="internal xref">Proxy-DNS-SVCB-Request-Close-On</a></p>
-</li>
-                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.1.2.3">
-                    <p id="section-toc.1-1.3.2.1.2.3.1"><a href="#section-3.1.3" class="auto internal xref">3.1.3</a>.  <a href="#name-example" class="internal xref">Example</a></p>
-</li>
-                </ul>
+                <p id="section-toc.1-1.3.2.1.1" class="keepWithNext"><a href="#section-3.1" class="auto internal xref">3.1</a>.  <a href="#name-the-proxy-dns-svcb-request-" class="internal xref">The Proxy-DNS-SVCB-Request Header Field</a></p>
 </li>
               <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2">
-                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-proxy-structured-http-heade" class="internal xref">Proxy Structured HTTP Header Fields</a></p>
+                <p id="section-toc.1-1.3.2.2.1"><a href="#section-3.2" class="auto internal xref">3.2</a>.  <a href="#name-the-proxy-dns-svcb-response" class="internal xref">The Proxy-DNS-SVCB-Response Header Field</a></p>
 <ul class="compact toc ulBare ulEmpty">
 <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2.2.1">
-                    <p id="section-toc.1-1.3.2.2.2.1.1"><a href="#section-3.2.1" class="auto internal xref">3.2.1</a>.  <a href="#name-proxy-dns-svcb-response" class="internal xref">Proxy-DNS-SVCB-Response</a></p>
-</li>
-                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.2.2.2">
-                    <p id="section-toc.1-1.3.2.2.2.2.1"><a href="#section-3.2.2" class="auto internal xref">3.2.2</a>.  <a href="#name-proxy-dns-svcb-response-clo" class="internal xref">Proxy-DNS-SVCB-Response-Closed-On</a></p>
+                    <p id="section-toc.1-1.3.2.2.2.1.1"><a href="#section-3.2.1" class="auto internal xref">3.2.1</a>.  <a href="#name-empty-and-absent-responses" class="internal xref">Empty and Absent Responses</a></p>
 </li>
                 </ul>
 </li>
               <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3">
-                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-processing-considerations" class="internal xref">Processing Considerations</a></p>
+                <p id="section-toc.1-1.3.2.3.1"><a href="#section-3.3" class="auto internal xref">3.3</a>.  <a href="#name-processing-rules" class="internal xref">Processing Rules</a></p>
 <ul class="compact toc ulBare ulEmpty">
 <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3.2.1">
-                    <p id="section-toc.1-1.3.2.3.2.1.1"><a href="#section-3.3.1" class="auto internal xref">3.3.1</a>.  <a href="#name-client-processing-considera" class="internal xref">Client Processing Considerations</a></p>
+                    <p id="section-toc.1-1.3.2.3.2.1.1"><a href="#section-3.3.1" class="auto internal xref">3.3.1</a>.  <a href="#name-client-behavior" class="internal xref">Client Behavior</a></p>
 </li>
                   <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.3.2.2">
-                    <p id="section-toc.1-1.3.2.3.2.2.1"><a href="#section-3.3.2" class="auto internal xref">3.3.2</a>.  <a href="#name-proxy-processing-considerat" class="internal xref">Proxy Processing Considerations</a></p>
+                    <p id="section-toc.1-1.3.2.3.2.2.1"><a href="#section-3.3.2" class="auto internal xref">3.3.2</a>.  <a href="#name-proxy-behavior" class="internal xref">Proxy Behavior</a></p>
 </li>
                 </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3.2.4">
+                <p id="section-toc.1-1.3.2.4.1"><a href="#section-3.4" class="auto internal xref">3.4</a>.  <a href="#name-example" class="internal xref">Example</a></p>
 </li>
             </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
-            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-examples" class="internal xref">Examples</a></p>
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-proxy-use-of-svcb-informati" class="internal xref">Proxy Use of SVCB Information</a></p>
 <ul class="compact toc ulBare ulEmpty">
 <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
-                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-scenario-1-successful-conne" class="internal xref">Scenario 1: Successful CONNECT with SVCB Parameters Returned</a></p>
-<ul class="compact toc ulBare ulEmpty">
-<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1.2.1">
-                    <p id="section-toc.1-1.4.2.1.2.1.1"><a href="#section-4.1.1" class="auto internal xref">4.1.1</a>.  <a href="#name-scenario-2-close-on-trigger" class="internal xref">Scenario 2: Close-On Triggered, Client Retries with CONNECT-UDP</a></p>
-</li>
-                </ul>
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-signaling-dns-name-resoluti" class="internal xref">Signaling DNS Name Resolution</a></p>
 </li>
               <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
-                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-scenario-3-multiple-rrs-wit" class="internal xref">Scenario 3: Multiple RRs with Different Priorities</a></p>
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-example-2" class="internal xref">Example</a></p>
 </li>
             </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
-            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-conditional-connection-clos" class="internal xref">Conditional Connection Closure</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.1">
+                <p id="section-toc.1-1.5.2.1.1"><a href="#section-5.1" class="auto internal xref">5.1</a>.  <a href="#name-motivation" class="internal xref">Motivation</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2">
+                <p id="section-toc.1-1.5.2.2.1"><a href="#section-5.2" class="auto internal xref">5.2</a>.  <a href="#name-the-proxy-dns-svcb-request-c" class="internal xref">The Proxy-DNS-SVCB-Request-Close-On Header Field</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2.2.1">
+                    <p id="section-toc.1-1.5.2.2.2.1.1"><a href="#section-5.2.1" class="auto internal xref">5.2.1</a>.  <a href="#name-initial-tokens" class="internal xref">Initial Tokens</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2.2.2">
+                    <p id="section-toc.1-1.5.2.2.2.2.1"><a href="#section-5.2.2" class="auto internal xref">5.2.2</a>.  <a href="#name-evaluation-rules" class="internal xref">Evaluation Rules</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.2.2.3">
+                    <p id="section-toc.1-1.5.2.2.2.3.1"><a href="#section-5.2.3" class="auto internal xref">5.2.3</a>.  <a href="#name-extensibility" class="internal xref">Extensibility</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.3">
+                <p id="section-toc.1-1.5.2.3.1"><a href="#section-5.3" class="auto internal xref">5.3</a>.  <a href="#name-the-proxy-dns-svcb-response-" class="internal xref">The Proxy-DNS-SVCB-Response-Closed-On Header Field</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.4">
+                <p id="section-toc.1-1.5.2.4.1"><a href="#section-5.4" class="auto internal xref">5.4</a>.  <a href="#name-processing-rules-2" class="internal xref">Processing Rules</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.4.2.1">
+                    <p id="section-toc.1-1.5.2.4.2.1.1"><a href="#section-5.4.1" class="auto internal xref">5.4.1</a>.  <a href="#name-proxy-behavior-2" class="internal xref">Proxy Behavior</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.4.2.2">
+                    <p id="section-toc.1-1.5.2.4.2.2.1"><a href="#section-5.4.2" class="auto internal xref">5.4.2</a>.  <a href="#name-client-behavior-2" class="internal xref">Client Behavior</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5.2.5">
+                <p id="section-toc.1-1.5.2.5.1"><a href="#section-5.5" class="auto internal xref">5.5</a>.  <a href="#name-example-3" class="internal xref">Example</a></p>
+</li>
+            </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
-            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-combined-examples" class="internal xref">Combined Examples</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-successful-connect-with-svc" class="internal xref">Successful CONNECT with SVCB Parameters</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-multiple-rrs-with-different" class="internal xref">Multiple RRs with Different Priorities</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-aliasmode-with-next-hop-ali" class="internal xref">AliasMode with next-hop-aliases and Close-On</a></p>
+</li>
+            </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
-            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-todo-list" class="internal xref">TODO List</a></p>
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-privacy-of-client-preferenc" class="internal xref">Privacy of Client Preferences</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.2">
+                <p id="section-toc.1-1.7.2.2.1"><a href="#section-7.2" class="auto internal xref">7.2</a>.  <a href="#name-alias-chain-verification" class="internal xref">Alias Chain Verification</a></p>
+</li>
+            </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
-            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.1">
+                <p id="section-toc.1-1.8.2.1.1"><a href="#section-8.1" class="auto internal xref">8.1</a>.  <a href="#name-http-header-field-registrat" class="internal xref">HTTP Header Field Registrations</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8.2.2">
+                <p id="section-toc.1-1.8.2.2.1"><a href="#section-8.2" class="auto internal xref">8.2</a>.  <a href="#name-proxy-dns-svcb-request-clos" class="internal xref">Proxy-DNS-SVCB-Request-Close-On Token Registry</a></p>
+</li>
+            </ul>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
-            <p id="section-toc.1-1.9.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
 </li>
           <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
-            <p id="section-toc.1-1.10.1"><a href="#appendix-B" class="auto internal xref"></a><a href="#name-authors-addresses" class="internal xref">Authors' Addresses</a></p>
+            <p id="section-toc.1-1.10.1"><a href="#appendix-A" class="auto internal xref"></a><a href="#name-acknowledgments" class="internal xref">Acknowledgments</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#appendix-B" class="auto internal xref"></a><a href="#name-authors-addresses" class="internal xref">Authors' Addresses</a></p>
 </li>
         </ul>
 </nav>
@@ -1254,25 +1308,33 @@ hints) while preserving existing privacy constraints.<a href="#section-abstract-
       <h2 id="name-introduction">
 <a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
       </h2>
-<p id="section-1-1">The CONNECT method <span>[<a href="#RFC7231" class="cite xref">RFC7231</a>]</span> and the CONNECT-UDP method <span>[<a href="#RFC9298" class="cite xref">RFC9298</a>]</span> are HTTP
-request methods that allow clients to establish TCP or UDP flows to target
-servers via an HTTP proxy. Clients identify the target using authority-form
-(Section 5.3 of <span>[<a href="#RFC7230" class="cite xref">RFC7230</a>]</span>), which includes the server name or IP address and
-an associated port number. When the target is specified by name, the proxy
-resolves the name to an IPv4 or IPv6 address using A or AAAA queries.<a href="#section-1-1" class="pilcrow">¶</a></p>
-<p id="section-1-2">However, this arrangement prevents clients from using Service Binding (SVCB or
-HTTPS) RRs <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>, which increasingly carry important configuration
-information that influences how connections should be formed.  For example, SVCB
-records may indicate that a target server supports <code>h3</code>, enabling the client to
-use CONNECT-UDP immediately. Similarly, SVCB records may indicate support for
-Encrypted Client Hello (<code>ech</code>), which could affect how the client initiates the
-connection to the target server.<a href="#section-1-2" class="pilcrow">¶</a></p>
-<p id="section-1-3">Although clients could, in principle, perform their own SVCB resolution, this is
-often impractical in deployed environments due to privacy constraints or
-performance considerations. To that end, this document specifies HTTP header
-fields that allow proxy servers to relay information obtained from Service
-Binding (SVCB and HTTPS) records to clients when handling CONNECT or CONNECT-UDP
-requests.<a href="#section-1-3" class="pilcrow">¶</a></p>
+<p id="section-1-1">The CONNECT method <span>[<a href="#RFC7231" class="cite xref">RFC7231</a>]</span> and the CONNECT-UDP method <span>[<a href="#RFC9298" class="cite xref">RFC9298</a>]</span> allow
+HTTP clients to establish TCP or UDP flows to target servers through an HTTP
+proxy. The client identifies the target using authority-form, which includes a
+server name or IP address and a port number. When the target is a name, the
+proxy resolves it to an IP address using A or AAAA queries.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">This arrangement prevents the client from accessing Service Binding (SVCB and
+HTTPS) resource records <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span> for the target. SVCB records carry
+configuration that influences how connections should be formed, including
+supported application protocols (ALPN), Encrypted Client Hello keys, and
+alternative endpoints.<a href="#section-1-2" class="pilcrow">¶</a></p>
+<p id="section-1-3">This document defines three mechanisms that address this gap:<a href="#section-1-3" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-1-4.1">
+          <p id="section-1-4.1.1">A pair of HTTP header fields that allow the client to request, and the proxy
+to convey, SVCB parameters for the target (<a href="#requesting-and-receiving-svcb-information" class="auto internal xref">Section 3</a>).<a href="#section-1-4.1.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-1-4.2">
+          <p id="section-1-4.2.1">Guidance for how the proxy acts on SVCB data when establishing the forwarded
+connection, including alias resolution and the use of RFC 9532
+<span>[<a href="#RFC9532" class="cite xref">RFC9532</a>]</span> to signal followed aliases (<a href="#proxy-use-of-svcb-information" class="auto internal xref">Section 4</a>).<a href="#section-1-4.2.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-1-4.3">
+          <p id="section-1-4.3.1">A conditional closure mechanism that allows the client to request that the
+proxy abort the connection if certain SVCB conditions are met, returning the
+data so the client can retry with a different strategy (<a href="#conditional-connection-closure" class="auto internal xref">Section 5</a>).<a href="#section-1-4.3.1" class="pilcrow">¶</a></p>
+</li>
+      </ul>
 </section>
 </div>
 <div id="conventions-and-definitions">
@@ -1284,467 +1346,717 @@ requests.<a href="#section-1-3" class="pilcrow">¶</a></p>
 "<span class="bcp14">MAY</span>", and "<span class="bcp14">OPTIONAL</span>" in this document are to be interpreted as
 described in BCP 14 <span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they
 appear in all capitals, as shown here.<a href="#section-2-1" class="pilcrow">¶</a></p>
+<p id="section-2-2">The following terms are used throughout this document:<a href="#section-2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-2-3.1">
+          <p id="section-2-3.1.1"><strong>ServiceMode RR</strong>: An SVCB or HTTPS resource record with a non-zero
+SvcPriority value, as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>.<a href="#section-2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-2-3.2">
+          <p id="section-2-3.2.1"><strong>AliasMode RR</strong>: An SVCB or HTTPS resource record with SvcPriority 0,
+as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>.<a href="#section-2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+        <li class="normal" id="section-2-3.3">
+          <p id="section-2-3.3.1"><strong>Highest-priority RR</strong>: The ServiceMode RR in a resolved RRset with the
+lowest non-zero SvcPriority value.<a href="#section-2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+      </ul>
 </section>
 </div>
-<div id="structured-http-header-fields-for-proxying-svcb-information">
+<div id="requesting-and-receiving-svcb-information">
 <section id="section-3">
-      <h2 id="name-structured-http-header-fiel">
-<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-structured-http-header-fiel" class="section-name selfRef">Structured HTTP Header Fields for Proxying SVCB Information</a>
+      <h2 id="name-requesting-and-receiving-sv">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-requesting-and-receiving-sv" class="section-name selfRef">Requesting and Receiving SVCB Information</a>
       </h2>
-<div id="client-structured-http-header-fields">
+<p id="section-3-1">This section defines two HTTP header fields that allow a client to request SVCB
+parameters from the proxy and receive the resolved data in the response.<a href="#section-3-1" class="pilcrow">¶</a></p>
+<div id="the-proxy-dns-svcb-request-header-field">
 <section id="section-3.1">
-        <h3 id="name-client-structured-http-head">
-<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-client-structured-http-head" class="section-name selfRef">Client Structured HTTP Header Fields</a>
+        <h3 id="name-the-proxy-dns-svcb-request-">
+<a href="#section-3.1" class="section-number selfRef">3.1. </a><a href="#name-the-proxy-dns-svcb-request-" class="section-name selfRef">The Proxy-DNS-SVCB-Request Header Field</a>
         </h3>
-<div id="proxy-dns-svcb-request">
-<section id="section-3.1.1">
-          <h4 id="name-proxy-dns-svcb-request">
-<a href="#section-3.1.1" class="section-number selfRef">3.1.1. </a><a href="#name-proxy-dns-svcb-request" class="section-name selfRef">Proxy-DNS-SVCB-Request</a>
-          </h4>
-<p id="section-3.1.1-1">Clients can request SVCB parameters with the Structured Header <span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span>
-"Proxy-DNS-SVCB-Request". The value <span class="bcp14">MUST</span> be an sf-list whose members are sf-integer
-items that <span class="bcp14">MUST NOT</span> contain parameters. Each list member corresponds to the
-numeric version of an SvcParamKey. For example, a client wanting to receive ALPN
-and ECH Config parameters would send a request for 1 (alpn) and 5 (echconfig).<a href="#section-3.1.1-1" class="pilcrow">¶</a></p>
-<div class="lang-requestexample sourcecode" id="section-3.1.1-2">
+<p id="section-3.1-1">The "Proxy-DNS-SVCB-Request" header field is a Structured Field <span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> of
+type sf-boolean. A client includes this header field with a value of <code>?1</code> to
+signal that it wants the proxy to return SVCB/HTTPS information for the target.<a href="#section-3.1-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-3.1-2">
 <pre>
-proxy-dns-svcb-request = 1, 5
-</pre><a href="#section-3.1.1-2" class="pilcrow">¶</a>
+proxy-dns-svcb-request: ?1
+</pre><a href="#section-3.1-2" class="pilcrow">¶</a>
 </div>
 </section>
 </div>
-<div id="proxy-dns-svcb-request-close-on">
-<section id="section-3.1.2">
-          <h4 id="name-proxy-dns-svcb-request-clos">
-<a href="#section-3.1.2" class="section-number selfRef">3.1.2. </a><a href="#name-proxy-dns-svcb-request-clos" class="section-name selfRef">Proxy-DNS-SVCB-Request-Close-On</a>
+<div id="the-proxy-dns-svcb-response-header-field">
+<section id="section-3.2">
+        <h3 id="name-the-proxy-dns-svcb-response">
+<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-the-proxy-dns-svcb-response" class="section-name selfRef">The Proxy-DNS-SVCB-Response Header Field</a>
+        </h3>
+<p id="section-3.2-1">The "Proxy-DNS-SVCB-Response" header field is a Structured Field <span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span>
+that conveys the SVCB/HTTPS records resolved by the proxy for the target
+authority. The field value is an sf-list where each member is an sf-binary item
+containing the RDATA of a single SVCB/HTTPS resource record in wire format as
+defined in Section 2.2 of <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>.<a href="#section-3.2-1" class="pilcrow">¶</a></p>
+<p id="section-3.2-2">The proxy <span class="bcp14">SHOULD</span> include every SVCB/HTTPS record encountered during resolution,
+including any AliasMode records that were followed. This gives the client
+visibility into the full resolution path, not just the terminal records.<a href="#section-3.2-2" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-3.2-3">
+<pre>
+proxy-dns-svcb-response: :AAEGYW...:, :AAIHc3...:
+</pre><a href="#section-3.2-3" class="pilcrow">¶</a>
+</div>
+<p id="section-3.2-4">Each sf-binary item encodes one complete SVCB/HTTPS RDATA (SvcPriority,
+TargetName, and SvcParams). The client parses each item using the standard SVCB
+wire format.<a href="#section-3.2-4" class="pilcrow">¶</a></p>
+<div id="empty-and-absent-responses">
+<section id="section-3.2.1">
+          <h4 id="name-empty-and-absent-responses">
+<a href="#section-3.2.1" class="section-number selfRef">3.2.1. </a><a href="#name-empty-and-absent-responses" class="section-name selfRef">Empty and Absent Responses</a>
           </h4>
-<p id="section-3.1.2-1">The "Proxy-DNS-SVCB-Request-Close-On" header field is a Structured Header
-<span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> that indicate conditions if met should trigger a close on the
-request.<a href="#section-3.1.2-1" class="pilcrow">¶</a></p>
-<p id="section-3.1.2-2">The header value in this case is a list of tokens. This set of tokens should
-ideally be pre-defined and agreed upon by the client and the proxy.  In this
-document, we define two token values.<a href="#section-3.1.2-2" class="pilcrow">¶</a></p>
-<div class="lang-abnf sourcecode" id="section-3.1.2-3">
+<p id="section-3.2.1-1">If the proxy was unable to resolve SVCB records, or if resolution returned no
+SVCB/HTTPS records for the target, the proxy <span class="bcp14">MUST</span> include the header field with
+an empty list. If the header field is absent from the response, the client
+<span class="bcp14">SHOULD</span> treat the SVCB/HTTPS information as unknown.<a href="#section-3.2.1-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-3.2.1-2">
 <pre>
-Proxy-DNS-SVCB-Request-Close-On= sf-list
-</pre><a href="#section-3.1.2-3" class="pilcrow">¶</a>
+proxy-dns-svcb-response:
+</pre><a href="#section-3.2.1-2" class="pilcrow">¶</a>
 </div>
-<div id="defined-token-values">
-<section id="section-3.1.2.1">
-            <h5 id="name-defined-token-values">
-<a href="#section-3.1.2.1" class="section-number selfRef">3.1.2.1. </a><a href="#name-defined-token-values" class="section-name selfRef">Defined Token Values</a>
-            </h5>
-<p id="section-3.1.2.1-1">The following tokens are defined for the "Proxy-DNS-SVCB-Request-Close-On" header:<a href="#section-3.1.2.1-1" class="pilcrow">¶</a></p>
-<p id="section-3.1.2.1-2">h3-alpn: This token indicates that the client requests the proxy should close
-the connection if the ALPN (Application-Layer Protocol Negotiation) field in DNS
-SVCB/HTTPS records for the target contains the "h3" protocol identifier. A
-client may choose to add this token if it prefers CONNECT-UDP over CONNECT.<a href="#section-3.1.2.1-2" class="pilcrow">¶</a></p>
-<p id="section-3.1.2.1-3">ech-defined: This token indicates that client requests that the proxy should
-close the connection if the ECH (Encrypted Client Hello) SvcParamKey is present
-in DNS SVCB/HTTPS records for the target. A client may choose to add this token
-if it prefers to use ECH when connecting to the target.<a href="#section-3.1.2.1-3" class="pilcrow">¶</a></p>
-<div class="lang-tokenexample sourcecode" id="section-3.1.2.1-4">
-<pre>
-proxy-dns-svcb-request-close-on: h3-alpn
-proxy-dns-svcb-request-close-on: ech-defined
-proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
-</pre><a href="#section-3.1.2.1-4" class="pilcrow">¶</a>
+</section>
 </div>
+</section>
+</div>
+<div id="processing-rules">
+<section id="section-3.3">
+        <h3 id="name-processing-rules">
+<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-processing-rules" class="section-name selfRef">Processing Rules</a>
+        </h3>
+<div id="client-behavior">
+<section id="section-3.3.1">
+          <h4 id="name-client-behavior">
+<a href="#section-3.3.1" class="section-number selfRef">3.3.1. </a><a href="#name-client-behavior" class="section-name selfRef">Client Behavior</a>
+          </h4>
+<p id="section-3.3.1-1">A client that wishes to receive SVCB/HTTPS information <span class="bcp14">SHOULD</span> include the
+"Proxy-DNS-SVCB-Request" header field in its CONNECT or CONNECT-UDP request.<a href="#section-3.3.1-1" class="pilcrow">¶</a></p>
+<p id="section-3.3.1-2">Upon receiving a "Proxy-DNS-SVCB-Response" header field, the client parses each
+sf-binary member as SVCB/HTTPS RDATA and uses the resulting records to inform
+connection establishment, respecting SvcPriority ordering as defined in
+<span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>. If the header field contains an empty list or is absent, the
+client treats the SVCB/HTTPS information as unknown.<a href="#section-3.3.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="proxy-behavior">
+<section id="section-3.3.2">
+          <h4 id="name-proxy-behavior">
+<a href="#section-3.3.2" class="section-number selfRef">3.3.2. </a><a href="#name-proxy-behavior" class="section-name selfRef">Proxy Behavior</a>
+          </h4>
+<p id="section-3.3.2-1">Support for the "Proxy-DNS-SVCB-Request" header field is <span class="bcp14">OPTIONAL</span>. A proxy that
+does not support it <span class="bcp14">MUST</span> ignore the header and continue processing the request
+normally. In that case, the response will not include the
+"Proxy-DNS-SVCB-Response" header field.<a href="#section-3.3.2-1" class="pilcrow">¶</a></p>
+<p id="section-3.3.2-2">A proxy that supports the header field:<a href="#section-3.3.2-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-3.3.2-3.1">
+              <p id="section-3.3.2-3.1.1"><span class="bcp14">SHOULD</span> perform SVCB/HTTPS resolution for the target authority.<a href="#section-3.3.2-3.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.3.2-3.2">
+              <p id="section-3.3.2-3.2.1"><span class="bcp14">SHOULD</span> include the "Proxy-DNS-SVCB-Response" header field in its response.<a href="#section-3.3.2-3.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-3.3.2-3.3">
+              <p id="section-3.3.2-3.3.1"><span class="bcp14">MUST</span> include the header field with an empty list if resolution fails or
+returns no SVCB/HTTPS records.<a href="#section-3.3.2-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
 </section>
 </div>
 </section>
 </div>
 <div id="example">
-<section id="section-3.1.3">
-          <h4 id="name-example">
-<a href="#section-3.1.3" class="section-number selfRef">3.1.3. </a><a href="#name-example" class="section-name selfRef">Example</a>
-          </h4>
-<div class="lang-example sourcecode" id="section-3.1.3-1">
+<section id="section-3.4">
+        <h3 id="name-example">
+<a href="#section-3.4" class="section-number selfRef">3.4. </a><a href="#name-example" class="section-name selfRef">Example</a>
+        </h3>
+<p id="section-3.4-1">The client sends a CONNECT request requesting SVCB information:<a href="#section-3.4-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-3.4-2">
 <pre>
 HEADERS
 :method = CONNECT
 :authority = svc.example.com:443
-proxy-dns-svcb-request = 1, 5
-proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
-</pre><a href="#section-3.1.3-1" class="pilcrow">¶</a>
+proxy-dns-svcb-request: ?1
+</pre><a href="#section-3.4-2" class="pilcrow">¶</a>
 </div>
-<p id="section-3.1.3-2">In this example, the client is requesting the proxy communicate back
-the ALPN and ECH SvcParamKey values of the target's SVCB/HTTPS RRs.
-The client is also requesting that if the target supports H3 or ECH
-then it should close the connection attempt so that the client may
-reattempt.<a href="#section-3.1.3-2" class="pilcrow">¶</a></p>
-</section>
-</div>
-</section>
-</div>
-<div id="proxy-structured-http-header-fields">
-<section id="section-3.2">
-        <h3 id="name-proxy-structured-http-heade">
-<a href="#section-3.2" class="section-number selfRef">3.2. </a><a href="#name-proxy-structured-http-heade" class="section-name selfRef">Proxy Structured HTTP Header Fields</a>
-        </h3>
-<div id="proxy-dns-svcb-response">
-<section id="section-3.2.1">
-          <h4 id="name-proxy-dns-svcb-response">
-<a href="#section-3.2.1" class="section-number selfRef">3.2.1. </a><a href="#name-proxy-dns-svcb-response" class="section-name selfRef">Proxy-DNS-SVCB-Response</a>
-          </h4>
-<p id="section-3.2.1-1">A proxy <span class="bcp14">MAY</span> include the "Proxy-DNS-SVCB-Response" Structured Header <span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> in a
-CONNECT or CONNECT-UDP response to convey the SVCB/HTTPS RRset resolved for the
-target authority. The "Proxy-DNS-SVCB-Response" header field is a Structured Field
-<span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> of type sf-list. Each member of the list is an sf-inner-list
-representing a single SVCB/HTTPS RR, and the list as a whole represents the full
-RRset.<a href="#section-3.2.1-1" class="pilcrow">¶</a></p>
-<p id="section-3.2.1-2">Each inner list <span class="bcp14">MUST</span> carry the following parameters:<a href="#section-3.2.1-2" class="pilcrow">¶</a></p>
-<ul class="normal">
-<li class="normal" id="section-3.2.1-3.1">
-              <p id="section-3.2.1-3.1.1"><strong>priority</strong>: an sf-integer corresponding to the SvcPriority field of the RR as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>.<a href="#section-3.2.1-3.1.1" class="pilcrow">¶</a></p>
-</li>
-            <li class="normal" id="section-3.2.1-3.2">
-              <p id="section-3.2.1-3.2.1"><strong>target</strong>: an sf-string corresponding to the TargetName field of the RR as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>.<a href="#section-3.2.1-3.2.1" class="pilcrow">¶</a></p>
-</li>
-          </ul>
-<p id="section-3.2.1-4">Additionally, every member of the inner list is an sf-integer corresponding to
-the numeric identifier of a SvcParamKey as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>. Each such
-member <span class="bcp14">MAY</span> carry a single parameter whose name is "value" and whose value is an
-sf-binary item containing the wire-format encoding of the corresponding
-SvcParamValue as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>. A SvcParamKey <span class="bcp14">MUST</span> appear at most once
-within a given inner list.<a href="#section-3.2.1-4" class="pilcrow">¶</a></p>
-<p id="section-3.2.1-5">For AliasMode records (SvcPriority 0), the inner list <span class="bcp14">MUST</span> be empty, as
-AliasMode RRs do not carry SvcParams. The "target" parameter <span class="bcp14">MUST</span> convey the
-alias target name.<a href="#section-3.2.1-5" class="pilcrow">¶</a></p>
-<p id="section-3.2.1-6">A proxy <span class="bcp14">SHOULD</span> restrict the SvcParams conveyed in each inner list to only the
-SvcParamKeys enumerated in the client's "Proxy-DNS-SVCB-Request" header field. If the
-proxy was unable to perform SVCB resolution, or if resolution returned no
-SVCB/HTTPS RRs for the target, the proxy <span class="bcp14">MUST</span> include the header field with an
-empty list.<a href="#section-3.2.1-6" class="pilcrow">¶</a></p>
-<div class="lang-responseexample sourcecode" id="section-3.2.1-7">
+<p id="section-3.4-3">The proxy resolves SVCB records for <code>svc.example.com</code> and finds a ServiceMode
+RR with <code>h3</code> ALPN and an ECH configuration. The proxy returns the SVCB RDATA:<a href="#section-3.4-3" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-3.4-4">
 <pre>
-proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc1.example.com",
-                          (1;value=:bmkK:);priority=2;target="svc2.example.com"
-</pre><a href="#section-3.2.1-7" class="pilcrow">¶</a>
+HEADERS
+:status = 200
+proxy-dns-svcb-response: :AAEGYW...:
+</pre><a href="#section-3.4-4" class="pilcrow">¶</a>
 </div>
-<div class="lang-responseexample sourcecode" id="section-3.2.1-8">
-<pre>
-proxy-dns-svcb-response = ();priority=0;target="alias.example.com"
-</pre><a href="#section-3.2.1-8" class="pilcrow">¶</a>
-</div>
-<div class="lang-responseexample sourcecode" id="section-3.2.1-9">
-<pre>
-proxy-dns-svcb-response =
-</pre><a href="#section-3.2.1-9" class="pilcrow">¶</a>
-</div>
-<p id="section-3.2.1-10">Clients <span class="bcp14">MUST NOT</span> rely on the presence of specific SvcParamKeys in the response.
-If the header field is absent, the client <span class="bcp14">SHOULD</span> treat the SVCB/HTTPS parameter
-set for the target as unknown.<a href="#section-3.2.1-10" class="pilcrow">¶</a></p>
-</section>
-</div>
-<div id="proxy-dns-svcb-response-closed-on">
-<section id="section-3.2.2">
-          <h4 id="name-proxy-dns-svcb-response-clo">
-<a href="#section-3.2.2" class="section-number selfRef">3.2.2. </a><a href="#name-proxy-dns-svcb-response-clo" class="section-name selfRef">Proxy-DNS-SVCB-Response-Closed-On</a>
-          </h4>
-<p id="section-3.2.2-1">The "Proxy-DNS-SVCB-Response-Closed-On" header field is a Structured Field
-<span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> of type sf-list. Each member of the list is an sf-token
-corresponding to a token defined in Section XX (Defined Token Values) that was
-present in the client's "Proxy-DNS-SVCB-Request-Close-On" header field and whose
-condition was evaluated as satisfied by the proxy.<a href="#section-3.2.2-1" class="pilcrow">¶</a></p>
-<p id="section-3.2.2-2">A proxy <span class="bcp14">MUST</span> include this header field when it closes a request in response to a
-satisfied condition from the client's "Proxy-DNS-SVCB-Request-Close-On" header field.
-The proxy <span class="bcp14">MUST</span> report all tokens whose conditions were satisfied. The proxy <span class="bcp14">MUST NOT</span> include tokens that were absent from the client's
-"Proxy-DNS-SVCB-Request-Close-On" request, and <span class="bcp14">MUST NOT</span> include tokens whose
-conditions were not satisfied.<a href="#section-3.2.2-2" class="pilcrow">¶</a></p>
-<div class="lang-responseexample sourcecode" id="section-3.2.2-3">
-<pre>
-proxy-dns-svcb-response-closed-on: h3-alpn
-proxy-dns-svcb-response-closed-on: ech-defined
-proxy-dns-svcb-response-closed-on: h3-alpn, ech-defined
-</pre><a href="#section-3.2.2-3" class="pilcrow">¶</a>
-</div>
+<p id="section-3.4-5">The client may use the conveyed parameters to use CONNECT-UDP for any future
+connections to <code>svc.example.com</code>.<a href="#section-3.4-5" class="pilcrow">¶</a></p>
 </section>
 </div>
 </section>
 </div>
-<div id="processing-considerations">
-<section id="section-3.3">
-        <h3 id="name-processing-considerations">
-<a href="#section-3.3" class="section-number selfRef">3.3. </a><a href="#name-processing-considerations" class="section-name selfRef">Processing Considerations</a>
-        </h3>
-<div id="client-processing-considerations">
-<section id="section-3.3.1">
-          <h4 id="name-client-processing-considera">
-<a href="#section-3.3.1" class="section-number selfRef">3.3.1. </a><a href="#name-client-processing-considera" class="section-name selfRef">Client Processing Considerations</a>
-          </h4>
-<p id="section-3.3.1-1">A client that wishes to receive SVCB/HTTPS parameters from the proxy <span class="bcp14">SHOULD</span>
-include the "Proxy-DNS-SVCB-Request" header field in its CONNECT or CONNECT-UDP
-request, enumerating the SvcParamKeys it is interested in. A client <span class="bcp14">MAY</span>
-additionally include the "Proxy-DNS-SVCB-Request-Close-On" header field to request
-that the proxy close the connection if specific conditions are satisfied.<a href="#section-3.3.1-1" class="pilcrow">¶</a></p>
-<p id="section-3.3.1-2">Upon receipt of a "Proxy-DNS-SVCB-Response" header field, the client <span class="bcp14">SHOULD</span> use the
-conveyed RRset to inform how it establishes the connection to the target,
-respecting the SvcPriority ordering of the records as defined in <span>[<a href="#RFC9460" class="cite xref">RFC9460</a>]</span>.
-If the header field is present but contains an empty list, the client <span class="bcp14">SHOULD</span>
-treat the SVCB/HTTPS RRset for the target as unknown. If the header field is
-absent, the client <span class="bcp14">SHOULD</span> treat the SVCB/HTTPS RRset for the target as unknown.<a href="#section-3.3.1-2" class="pilcrow">¶</a></p>
-<p id="section-3.3.1-3">Upon receipt of a "Proxy-DNS-SVCB-Response-Closed-On" header field, the client <span class="bcp14">SHOULD</span>
-inspect the tokens present and use them, in conjunction with the parameters
-conveyed in the "Proxy-DNS-SVCB-Response" header field, to determine an appropriate
-retry strategy. For example:<a href="#section-3.3.1-3" class="pilcrow">¶</a></p>
-<ul class="normal">
-<li class="normal" id="section-3.3.1-4.1">
-              <p id="section-3.3.1-4.1.1">If the token "h3-alpn" is present, the client <span class="bcp14">SHOULD</span> reattempt the connection
-using CONNECT-UDP rather than CONNECT, using the ALPN and other SvcParam values
-from the highest priority RR conveyed in the "Proxy-DNS-SVCB-Response" header field.<a href="#section-3.3.1-4.1.1" class="pilcrow">¶</a></p>
-</li>
-            <li class="normal" id="section-3.3.1-4.2">
-              <p id="section-3.3.1-4.2.1">If the token "ech-defined" is present, the client <span class="bcp14">SHOULD</span> reattempt the
-connection using Encrypted Client Hello, using the ECH keys from the highest
-priority RR conveyed in the "Proxy-DNS-SVCB-Response" header field.<a href="#section-3.3.1-4.2.1" class="pilcrow">¶</a></p>
-</li>
-          </ul>
-<p id="section-3.3.1-5">If the "Proxy-DNS-SVCB-Response" header field is absent in a response containing
-"Proxy-DNS-SVCB-Response-Closed-On", the client <span class="bcp14">SHOULD</span> perform its own SVCB
-resolution before reattempting the connection.<a href="#section-3.3.1-5" class="pilcrow">¶</a></p>
-</section>
-</div>
-<div id="proxy-processing-considerations">
-<section id="section-3.3.2">
-          <h4 id="name-proxy-processing-considerat">
-<a href="#section-3.3.2" class="section-number selfRef">3.3.2. </a><a href="#name-proxy-processing-considerat" class="section-name selfRef">Proxy Processing Considerations</a>
-          </h4>
-<p id="section-3.3.2-1">Support for the "Proxy-DNS-SVCB-Request" and "Proxy-DNS-SVCB-Request-Close-On" header
-fields is <span class="bcp14">OPTIONAL</span>. A proxy that does not support these header fields <span class="bcp14">MUST</span>
-ignore them and <span class="bcp14">MUST</span> continue processing the CONNECT or CONNECT-UDP request as
-if they were absent.<a href="#section-3.3.2-1" class="pilcrow">¶</a></p>
-<p id="section-3.3.2-2">A proxy that supports the "Proxy-DNS-SVCB-Request" header field <span class="bcp14">SHOULD</span> perform
-SVCB/HTTPS resolution for the target authority and <span class="bcp14">SHOULD</span> include the
-"Proxy-DNS-SVCB-Response" header field in its response, restricted to the
-SvcParamKeys enumerated in the client's request. If the proxy was unable to
-perform SVCB resolution, or if resolution returned no SVCB/HTTPS RRs for the
-target, the proxy <span class="bcp14">MUST</span> include the "Proxy-DNS-SVCB-Response" header field with an
-empty list.<a href="#section-3.3.2-2" class="pilcrow">¶</a></p>
-<p id="section-3.3.2-3">A proxy that supports the "Proxy-DNS-SVCB-Request-Close-On" header field <span class="bcp14">MUST</span>
-evaluate each recognized token against the resolved SVCB/HTTPS RRset prior to
-establishing the forwarded connection to the target. Token evaluation <span class="bcp14">MUST</span> be
-performed as follows:<a href="#section-3.3.2-3" class="pilcrow">¶</a></p>
-<ul class="normal">
-<li class="normal" id="section-3.3.2-4.1">
-              <p id="section-3.3.2-4.1.1"><strong>h3-alpn</strong>: The proxy <span class="bcp14">MUST</span> evaluate this token against only the highest
-priority RR in the resolved RRset, i.e., the RR with the lowest non-zero
-SvcPriority value. The condition is satisfied if the ALPN SvcParamKey of that RR
-contains the "h3" protocol identifier. AliasMode records (SvcPriority 0) <span class="bcp14">MUST</span> be
-followed before evaluation.<a href="#section-3.3.2-4.1.1" class="pilcrow">¶</a></p>
-</li>
-            <li class="normal" id="section-3.3.2-4.2">
-              <p id="section-3.3.2-4.2.1"><strong>ech-defined</strong>: The proxy <span class="bcp14">MUST</span> evaluate this token against only the highest
-priority RR in the resolved RRset. The condition is satisfied if the ECH
-SvcParamKey is present in that RR.<a href="#section-3.3.2-4.2.1" class="pilcrow">¶</a></p>
-</li>
-          </ul>
-<p id="section-3.3.2-5">New tokens <span class="bcp14">MAY</span> be defined in future documents to address evaluation against
-other RRs in the RRset, or to define alternative evaluation semantics. For
-example, a future token could be defined to trigger closure if any RR in the
-RRset satisfies a condition, rather than only the highest priority RR. Unknown
-tokens <span class="bcp14">MUST</span> be silently ignored.<a href="#section-3.3.2-5" class="pilcrow">¶</a></p>
-<p id="section-3.3.2-6">If one or more recognized conditions are satisfied, the proxy <span class="bcp14">SHOULD NOT</span>
-establish the forwarded connection and <span class="bcp14">SHOULD</span> instead close the request,
-including the "Proxy-DNS-SVCB-Response-Closed-On" header field indicating the tokens
-that triggered the closure. The proxy <span class="bcp14">SHOULD</span> also include the
-"Proxy-DNS-SVCB-Response" header field populated with the resolved RRset, allowing
-the client to reattempt the connection without requiring an additional
-resolution step.<a href="#section-3.3.2-6" class="pilcrow">¶</a></p>
-<p id="section-3.3.2-7">A proxy <span class="bcp14">MUST</span> silently ignore any tokens in "Proxy-DNS-SVCB-Request-Close-On" that it
-does not recognize. The order in which tokens appear in the list does not
-indicate precedence; all recognized tokens are evaluated independently, and the
-presence of any single satisfied condition is sufficient to trigger closure.<a href="#section-3.3.2-7" class="pilcrow">¶</a></p>
-</section>
-</div>
-</section>
-</div>
-</section>
-</div>
-<div id="examples">
+<div id="proxy-use-of-svcb-information">
 <section id="section-4">
-      <h2 id="name-examples">
-<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-examples" class="section-name selfRef">Examples</a>
+      <h2 id="name-proxy-use-of-svcb-informati">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-proxy-use-of-svcb-informati" class="section-name selfRef">Proxy Use of SVCB Information</a>
       </h2>
-<div id="scenario-1-successful-connect-with-svcb-parameters-returned">
+<p id="section-4-1">When a proxy resolves SVCB records for the target, it may act on the data when
+establishing the forwarded connection. This section describes how the proxy
+signals its actions back to the client.<a href="#section-4-1" class="pilcrow">¶</a></p>
+<div id="signaling-dns-name-resolution">
 <section id="section-4.1">
-        <h3 id="name-scenario-1-successful-conne">
-<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-scenario-1-successful-conne" class="section-name selfRef">Scenario 1: Successful CONNECT with SVCB Parameters Returned</a>
+        <h3 id="name-signaling-dns-name-resoluti">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-signaling-dns-name-resoluti" class="section-name selfRef">Signaling DNS Name Resolution</a>
         </h3>
-<p id="section-4.1-1">The client sends a CONNECT request requesting ALPN and ECH parameters:<a href="#section-4.1-1" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.1-2">
-<pre>
-REQUEST HEADERS
-:method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request = 1, 5
-</pre><a href="#section-4.1-2" class="pilcrow">¶</a>
-</div>
-<p id="section-4.1-3">The proxy performs SVCB/HTTPS resolution for <code>svc.example.com</code> and finds a
-single RR indicating support for <code>h2</code> in the ALPN SvcParamKey and an ECH
-configuration. The proxy establishes the forwarded connection and responds
-successfully, conveying the resolved SVCB parameters:<a href="#section-4.1-3" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.1-4">
-<pre>
-RESPONSE HEADERS
-:status = 200
-proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc.example.com"
-</pre><a href="#section-4.1-4" class="pilcrow">¶</a>
-</div>
-<p id="section-4.1-5">The client uses the conveyed ALPN and ECH values to inform how it establishes the connection to the target.<a href="#section-4.1-5" class="pilcrow">¶</a></p>
-<div id="scenario-2-close-on-triggered-client-retries-with-connect-udp">
-<section id="section-4.1.1">
-          <h4 id="name-scenario-2-close-on-trigger">
-<a href="#section-4.1.1" class="section-number selfRef">4.1.1. </a><a href="#name-scenario-2-close-on-trigger" class="section-name selfRef">Scenario 2: Close-On Triggered, Client Retries with CONNECT-UDP</a>
-          </h4>
-<p id="section-4.1.1-1">The client sends a CONNECT request, requesting ALPN parameters and indicating that the connection should be closed if the target supports <code>h3</code>:<a href="#section-4.1.1-1" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.1.1-2">
-<pre>
-REQUEST HEADERS
-:method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request = 1
-proxy-dns-svcb-request-close-on: h3-alpn
-</pre><a href="#section-4.1.1-2" class="pilcrow">¶</a>
-</div>
-<p id="section-4.1.1-3">The proxy performs SVCB/HTTPS resolution for <code>svc.example.com</code> and finds that
-the highest priority RR contains <code>h3</code> in the ALPN SvcParamKey. The condition
-specified in the "Proxy-DNS-SVCB-Request-Close-On" header field is satisfied. The
-proxy does not establish a forwarded connection and instead responds with the
-satisfied condition and the resolved SVCB parameters:<a href="#section-4.1.1-3" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.1.1-4">
-<pre>
-RESPONSE HEADERS
-:status = 307
-proxy-dns-svcb-response-closed-on: h3-alpn
-proxy-dns-svcb-response = (1;value=:aGkK:);priority=1;target="svc.example.com"
-</pre><a href="#section-4.1.1-4" class="pilcrow">¶</a>
-</div>
-<p id="section-4.1.1-5">Upon receipt of the "Proxy-DNS-SVCB-Response-Closed-On" header field, the client
-observes that the <code>h3-alpn</code> condition was satisfied. Using the ALPN values
-conveyed in the "Proxy-DNS-SVCB-Response" header field, the client reattempts the
-connection using CONNECT-UDP:<a href="#section-4.1.1-5" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.1.1-6">
-<pre>
-REQUEST HEADERS
-:method = CONNECT-UDP
-:authority = svc.example.com:443
-proxy-dns-svcb-request = 1
-</pre><a href="#section-4.1.1-6" class="pilcrow">¶</a>
-</div>
-<p id="section-4.1.1-7">The proxy establishes the forwarded connection and responds successfully:<a href="#section-4.1.1-7" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.1.1-8">
-<pre>
-RESPONSE HEADERS
-:status = 200
-proxy-dns-svcb-response = (1;value=:aGkK:);priority=1;target="svc.example.com"
-</pre><a href="#section-4.1.1-8" class="pilcrow">¶</a>
-</div>
+<p id="section-4.1-1">When the proxy connects to a name different from the client's original target
+authority, whether due to AliasMode following or a ServiceMode TargetName, the
+proxy <span class="bcp14">SHOULD</span> signal the resolution chain to the client using the
+<code>next-hop-aliases</code> parameter of the Proxy-Status header field defined in
+<span>[<a href="#RFC9532" class="cite xref">RFC9532</a>]</span>.<a href="#section-4.1-1" class="pilcrow">¶</a></p>
 </section>
 </div>
-</section>
-</div>
-<div id="scenario-3-multiple-rrs-with-different-priorities">
+<div id="example-1">
 <section id="section-4.2">
-        <h3 id="name-scenario-3-multiple-rrs-wit">
-<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-scenario-3-multiple-rrs-wit" class="section-name selfRef">Scenario 3: Multiple RRs with Different Priorities</a>
+        <h3 id="name-example-2">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-example-2" class="section-name selfRef">Example</a>
         </h3>
-<p id="section-4.2-1">The client sends a CONNECT request requesting ALPN and ECH parameters:<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<p id="section-4.2-1">The client sends a CONNECT request for a target whose SVCB records include an
+alias chain and ECH configuration:<a href="#section-4.2-1" class="pilcrow">¶</a></p>
 <div class="lang-example sourcecode" id="section-4.2-2">
 <pre>
-REQUEST HEADERS
+HEADERS
 :method = CONNECT
 :authority = svc.example.com:443
-proxy-dns-svcb-request = 1, 5
-proxy-dns-svcb-request-close-on: h3-alpn
+proxy-dns-svcb-request: ?1
 </pre><a href="#section-4.2-2" class="pilcrow">¶</a>
 </div>
-<p id="section-4.2-3">The proxy performs SVCB/HTTPS resolution for <code>svc.example.com</code> and finds two RRs with different priorities:<a href="#section-4.2-3" class="pilcrow">¶</a></p>
-<div class="lang-dns sourcecode" id="section-4.2-4">
+<p id="section-4.2-3">The proxy resolves <code>svc.example.com</code> and finds a ServiceMode RR at
+<code>cdn.example.net</code> with <code>h2</code> ALPN and an ECH configuration. The proxy connects
+to <code>cdn.example.net</code> and returns:<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-4.2-4">
+<pre>
+HEADERS
+:status = 200
+proxy-status: proxy.example; next-hop-aliases="cdn.example.net"
+proxy-dns-svcb-response: :AAEGYW...:
+</pre><a href="#section-4.2-4" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+</section>
+</div>
+<div id="conditional-connection-closure">
+<section id="section-5">
+      <h2 id="name-conditional-connection-clos">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-conditional-connection-clos" class="section-name selfRef">Conditional Connection Closure</a>
+      </h2>
+<div id="motivation">
+<section id="section-5.1">
+        <h3 id="name-motivation">
+<a href="#section-5.1" class="section-number selfRef">5.1. </a><a href="#name-motivation" class="section-name selfRef">Motivation</a>
+        </h3>
+<p id="section-5.1-1">A client may prefer a different connection strategy based on the SVCB
+information for the target. For example, the client might prefer CONNECT-UDP
+when the target supports <code>h3</code>, or use Encrypted Client Hello when the target
+publishes ECH keys.<a href="#section-5.1-1" class="pilcrow">¶</a></p>
+<p id="section-5.1-2">Without coordination, the client learns this only after the proxy has
+established the forwarded connection. Tearing that connection down and
+retrying wastes a round trip. The mechanism in this section lets the client
+signal conditions under which the proxy should abort before connecting and
+return the SVCB data immediately.<a href="#section-5.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="the-proxy-dns-svcb-request-close-on-header-field">
+<section id="section-5.2">
+        <h3 id="name-the-proxy-dns-svcb-request-c">
+<a href="#section-5.2" class="section-number selfRef">5.2. </a><a href="#name-the-proxy-dns-svcb-request-c" class="section-name selfRef">The Proxy-DNS-SVCB-Request-Close-On Header Field</a>
+        </h3>
+<p id="section-5.2-1">The "Proxy-DNS-SVCB-Request-Close-On" header field is a Structured Field
+<span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> whose value is an sf-list of sf-token items. Each token names a
+condition that, if satisfied by the resolved SVCB data, should cause the proxy
+to close the request without establishing the forwarded connection.<a href="#section-5.2-1" class="pilcrow">¶</a></p>
+<p id="section-5.2-2">The set of tokens is open-ended, and any token that the client and proxy
+mutually understand can be used; this document defines an initial set of tokens
+that clients and proxies must support, but deployments are free to use
+additional tokens registered through the process described in
+<a href="#iana-considerations" class="auto internal xref">Section 8</a> or agreed upon out-of-band.<a href="#section-5.2-2" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-5.2-3">
+<pre>
+proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
+</pre><a href="#section-5.2-3" class="pilcrow">¶</a>
+</div>
+<div id="initial-tokens">
+<section id="section-5.2.1">
+          <h4 id="name-initial-tokens">
+<a href="#section-5.2.1" class="section-number selfRef">5.2.1. </a><a href="#name-initial-tokens" class="section-name selfRef">Initial Tokens</a>
+          </h4>
+<p id="section-5.2.1-1">This document defines the following tokens. These are starting points covering
+common cases; they do not constrain what other tokens may be defined or used.<a href="#section-5.2.1-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlParallel" id="section-5.2.1-2">
+            <dt id="section-5.2.1-2.1">h3-alpn:</dt>
+            <dd style="margin-left: 1.5em" id="section-5.2.1-2.2">
+              <p id="section-5.2.1-2.2.1">The condition is satisfied if the ALPN SvcParamKey of the highest-priority RR
+contains the "h3" protocol identifier. A client includes this token when it
+prefers CONNECT-UDP for targets that support HTTP/3.<a href="#section-5.2.1-2.2.1" class="pilcrow">¶</a></p>
+</dd>
+            <dd class="break"></dd>
+<dt id="section-5.2.1-2.3">ech-defined:</dt>
+            <dd style="margin-left: 1.5em" id="section-5.2.1-2.4">
+              <p id="section-5.2.1-2.4.1">The condition is satisfied if the ECH SvcParamKey is present in the
+highest-priority RR. A client includes this token when it prefers to use
+Encrypted Client Hello when connecting to the target.<a href="#section-5.2.1-2.4.1" class="pilcrow">¶</a></p>
+</dd>
+          <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="evaluation-rules">
+<section id="section-5.2.2">
+          <h4 id="name-evaluation-rules">
+<a href="#section-5.2.2" class="section-number selfRef">5.2.2. </a><a href="#name-evaluation-rules" class="section-name selfRef">Evaluation Rules</a>
+          </h4>
+<p id="section-5.2.2-1">The proxy evaluates each recognized token against the resolved SVCB/HTTPS RRset
+as follows:<a href="#section-5.2.2-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.2.2-2.1">
+              <p id="section-5.2.2-2.1.1">Evaluation is performed against only the highest-priority RR (the RR with the
+lowest non-zero SvcPriority value).<a href="#section-5.2.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.2-2.2">
+              <p id="section-5.2.2-2.2.1">AliasMode records <span class="bcp14">MUST</span> be followed before evaluation.<a href="#section-5.2.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.2-2.3">
+              <p id="section-5.2.2-2.3.1">All recognized tokens are evaluated independently. The order in which tokens
+appear does not indicate precedence.<a href="#section-5.2.2-2.3.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.2-2.4">
+              <p id="section-5.2.2-2.4.1">The "h3-alpn" token <span class="bcp14">MUST NOT</span> be evaluated when the client's request uses the
+CONNECT-UDP method, since the client is already using a UDP-based tunnel.<a href="#section-5.2.2-2.4.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.2.2-2.5">
+              <p id="section-5.2.2-2.5.1">Unknown tokens <span class="bcp14">MUST</span> be silently ignored.<a href="#section-5.2.2-2.5.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+</section>
+</div>
+<div id="extensibility">
+<section id="section-5.2.3">
+          <h4 id="name-extensibility">
+<a href="#section-5.2.3" class="section-number selfRef">5.2.3. </a><a href="#name-extensibility" class="section-name selfRef">Extensibility</a>
+          </h4>
+<p id="section-5.2.3-1">New tokens can carry new evaluation semantics. For example, a token could
+trigger closure if any RR in the RRset satisfies a condition, rather than only
+the highest-priority RR. The evaluation rules above apply to the tokens defined
+in this document; new tokens define their own.<a href="#section-5.2.3-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="the-proxy-dns-svcb-response-closed-on-header-field">
+<section id="section-5.3">
+        <h3 id="name-the-proxy-dns-svcb-response-">
+<a href="#section-5.3" class="section-number selfRef">5.3. </a><a href="#name-the-proxy-dns-svcb-response-" class="section-name selfRef">The Proxy-DNS-SVCB-Response-Closed-On Header Field</a>
+        </h3>
+<p id="section-5.3-1">The "Proxy-DNS-SVCB-Response-Closed-On" header field is a Structured Field
+<span>[<a href="#RFC8941" class="cite xref">RFC8941</a>]</span> whose value is an sf-list of sf-token items. The proxy includes
+this header field when it closes a request due to a satisfied condition.<a href="#section-5.3-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.3-2.1">
+            <p id="section-5.3-2.1.1">The proxy <span class="bcp14">MUST</span> report all tokens whose conditions were satisfied.<a href="#section-5.3-2.1.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.3-2.2">
+            <p id="section-5.3-2.2.1">The proxy <span class="bcp14">MUST NOT</span> include tokens that were absent from the client's
+"Proxy-DNS-SVCB-Request-Close-On" header field.<a href="#section-5.3-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          <li class="normal" id="section-5.3-2.3">
+            <p id="section-5.3-2.3.1">The proxy <span class="bcp14">MUST NOT</span> include tokens whose conditions were not satisfied.<a href="#section-5.3-2.3.1" class="pilcrow">¶</a></p>
+</li>
+        </ul>
+<div class="lang-example sourcecode" id="section-5.3-3">
+<pre>
+proxy-dns-svcb-response-closed-on: h3-alpn
+</pre><a href="#section-5.3-3" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="processing-rules-1">
+<section id="section-5.4">
+        <h3 id="name-processing-rules-2">
+<a href="#section-5.4" class="section-number selfRef">5.4. </a><a href="#name-processing-rules-2" class="section-name selfRef">Processing Rules</a>
+        </h3>
+<div id="proxy-behavior-1">
+<section id="section-5.4.1">
+          <h4 id="name-proxy-behavior-2">
+<a href="#section-5.4.1" class="section-number selfRef">5.4.1. </a><a href="#name-proxy-behavior-2" class="section-name selfRef">Proxy Behavior</a>
+          </h4>
+<p id="section-5.4.1-1">A proxy that supports the "Proxy-DNS-SVCB-Request-Close-On" header field <span class="bcp14">MUST</span>
+evaluate each recognized token against the resolved SVCB/HTTPS RRset prior to
+establishing the forwarded connection.<a href="#section-5.4.1-1" class="pilcrow">¶</a></p>
+<p id="section-5.4.1-2">If one or more conditions are satisfied:<a href="#section-5.4.1-2" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.4.1-3.1">
+              <p id="section-5.4.1-3.1.1">The proxy <span class="bcp14">SHOULD NOT</span> establish the forwarded connection.<a href="#section-5.4.1-3.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.4.1-3.2">
+              <p id="section-5.4.1-3.2.1">The proxy <span class="bcp14">SHOULD</span> close the request with HTTP status code 307 and include the
+"Proxy-DNS-SVCB-Response-Closed-On" header field indicating the satisfied
+tokens.<a href="#section-5.4.1-3.2.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.4.1-3.3">
+              <p id="section-5.4.1-3.3.1">The proxy <span class="bcp14">MUST</span> include the "Proxy-DNS-SVCB-Response" header field with the
+resolved records, so the client can retry using the conveyed information
+without an additional DNS resolution.<a href="#section-5.4.1-3.3.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+<p id="section-5.4.1-4">[TODO: 307 (Temporary Redirect) is used as a placeholder to signal that the
+request was not fulfilled. This may change based on discussions.]<a href="#section-5.4.1-4" class="pilcrow">¶</a></p>
+<p id="section-5.4.1-5">A proxy that does not support the "Proxy-DNS-SVCB-Request-Close-On" header field
+<span class="bcp14">MUST</span> ignore it and proceed normally.<a href="#section-5.4.1-5" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="client-behavior-1">
+<section id="section-5.4.2">
+          <h4 id="name-client-behavior-2">
+<a href="#section-5.4.2" class="section-number selfRef">5.4.2. </a><a href="#name-client-behavior-2" class="section-name selfRef">Client Behavior</a>
+          </h4>
+<p id="section-5.4.2-1">Upon receiving a "Proxy-DNS-SVCB-Response-Closed-On" header field, the client
+parses the accompanying "Proxy-DNS-SVCB-Response" and inspects the satisfied
+tokens to determine its retry strategy:<a href="#section-5.4.2-1" class="pilcrow">¶</a></p>
+<ul class="normal">
+<li class="normal" id="section-5.4.2-2.1">
+              <p id="section-5.4.2-2.1.1">If "h3-alpn" is present, the client <span class="bcp14">SHOULD</span> retry using CONNECT-UDP with ALPN
+values from the highest-priority RR in the conveyed records.<a href="#section-5.4.2-2.1.1" class="pilcrow">¶</a></p>
+</li>
+            <li class="normal" id="section-5.4.2-2.2">
+              <p id="section-5.4.2-2.2.1">If "ech-defined" is present, the client <span class="bcp14">SHOULD</span> retry using Encrypted Client
+Hello with the ECH keys from the highest-priority RR in the conveyed records.<a href="#section-5.4.2-2.2.1" class="pilcrow">¶</a></p>
+</li>
+          </ul>
+</section>
+</div>
+</section>
+</div>
+<div id="example-2">
+<section id="section-5.5">
+        <h3 id="name-example-3">
+<a href="#section-5.5" class="section-number selfRef">5.5. </a><a href="#name-example-3" class="section-name selfRef">Example</a>
+        </h3>
+<p id="section-5.5-1">The client sends a CONNECT request and indicates that it strongly prefers
+CONNECT-UDP if the target supports it by including the h3-alpn token:<a href="#section-5.5-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-5.5-2">
+<pre>
+HEADERS
+:method = CONNECT
+:authority = svc.example.com:443
+proxy-dns-svcb-request: ?1
+proxy-dns-svcb-request-close-on: h3-alpn
+</pre><a href="#section-5.5-2" class="pilcrow">¶</a>
+</div>
+<p id="section-5.5-3">The proxy resolves a single ServiceMode RR:<a href="#section-5.5-3" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-5.5-4">
+<pre>
+svc.example.com. 300 IN HTTPS 1 . alpn=h2,h3
+</pre><a href="#section-5.5-4" class="pilcrow">¶</a>
+</div>
+<p id="section-5.5-5">The highest-priority RR contains <code>h3</code> in ALPN, so the condition is satisfied.
+The proxy closes the request:<a href="#section-5.5-5" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-5.5-6">
+<pre>
+HEADERS
+:status = 307
+proxy-dns-svcb-response-closed-on: h3-alpn
+proxy-dns-svcb-response: :AAEGYW...:
+</pre><a href="#section-5.5-6" class="pilcrow">¶</a>
+</div>
+<p id="section-5.5-7">The client observes the satisfied condition and retries with CONNECT-UDP:<a href="#section-5.5-7" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-5.5-8">
+<pre>
+HEADERS
+:method = CONNECT-UDP
+:authority = svc.example.com:443
+proxy-dns-svcb-request: ?0
+</pre><a href="#section-5.5-8" class="pilcrow">¶</a>
+</div>
+<p id="section-5.5-9">The client need not request the SVCB/HTTPS data again since it already has the
+information it needs. The client may instead omit the "Proxy-DNS-SVCB-Request"
+header field entirely.<a href="#section-5.5-9" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="combined-examples">
+<section id="section-6">
+      <h2 id="name-combined-examples">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-combined-examples" class="section-name selfRef">Combined Examples</a>
+      </h2>
+<div id="successful-connect-with-svcb-parameters">
+<section id="section-6.1">
+        <h3 id="name-successful-connect-with-svc">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-successful-connect-with-svc" class="section-name selfRef">Successful CONNECT with SVCB Parameters</a>
+        </h3>
+<p id="section-6.1-1">The client requests SVCB information via CONNECT:<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.1-2">
+<pre>
+HEADERS
+:method = CONNECT
+:authority = svc.example.com:443
+proxy-dns-svcb-request: ?1
+</pre><a href="#section-6.1-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.1-3">The proxy resolves a single ServiceMode RR:<a href="#section-6.1-3" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-6.1-4">
+<pre>
+svc.example.com. 300 IN HTTPS 1 . alpn=h2 ech=...
+</pre><a href="#section-6.1-4" class="pilcrow">¶</a>
+</div>
+<p id="section-6.1-5">The TargetName "." indicates the target is the same as the owner name
+(<code>svc.example.com</code>). The proxy establishes the connection and returns the
+SVCB RDATA:<a href="#section-6.1-5" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.1-6">
+<pre>
+HEADERS
+:status = 200
+proxy-dns-svcb-response: :AAEGYW...:
+</pre><a href="#section-6.1-6" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="multiple-rrs-with-different-priorities">
+<section id="section-6.2">
+        <h3 id="name-multiple-rrs-with-different">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-multiple-rrs-with-different" class="section-name selfRef">Multiple RRs with Different Priorities</a>
+        </h3>
+<p id="section-6.2-1">The client sends CONNECT requesting SVCB information with <code>h3-alpn</code> close-on:<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.2-2">
+<pre>
+HEADERS
+:method = CONNECT
+:authority = svc.example.com:443
+proxy-dns-svcb-request: ?1
+proxy-dns-svcb-request-close-on: h3-alpn
+</pre><a href="#section-6.2-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.2-3">The proxy resolves two RRs:<a href="#section-6.2-3" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-6.2-4">
 <pre>
 svc.example.com. 300 IN HTTPS 1 svc1.example.com. alpn=h2,h3 ech=...
 svc.example.com. 300 IN HTTPS 2 svc2.example.com. alpn=h2
-</pre><a href="#section-4.2-4" class="pilcrow">¶</a>
+</pre><a href="#section-6.2-4" class="pilcrow">¶</a>
 </div>
-<p id="section-4.2-5">The highest priority RR (priority 1) indicates support for <code>h3</code> in the ALPN
-SvcParamKey. The <code>h3-alpn</code> condition is therefore satisfied. The proxy does not
-establish a forwarded connection and responds with the full RRset and the
-satisfied condition:<a href="#section-4.2-5" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.2-6">
+<p id="section-6.2-5">The highest-priority RR (priority 1) contains <code>h3</code> in ALPN. The proxy closes:<a href="#section-6.2-5" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.2-6">
 <pre>
-RESPONSE HEADERS
+HEADERS
 :status = 307
 proxy-dns-svcb-response-closed-on: h3-alpn
-proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc1.example.com",
-                          (1;value=:bmkK:);priority=2;target="svc2.example.com"
-</pre><a href="#section-4.2-6" class="pilcrow">¶</a>
+proxy-dns-svcb-response: :AAEGYW...:, :AAIHc3...:
+</pre><a href="#section-6.2-6" class="pilcrow">¶</a>
 </div>
-<p id="section-4.2-7">Upon receipt of the "Proxy-DNS-SVCB-Response-Closed-On" header field, the client
-observes that the <code>h3-alpn</code> condition was satisfied. The client selects the
-highest priority RR and reattempts the connection using CONNECT-UDP to
-<code>svc1.example.com</code>:<a href="#section-4.2-7" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.2-8">
+<p id="section-6.2-7">The client retries with CONNECT-UDP using the original authority. The proxy
+re-resolves and connects to the highest-priority RR's target:<a href="#section-6.2-7" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.2-8">
 <pre>
-REQUEST HEADERS
+HEADERS
 :method = CONNECT-UDP
-:authority = svc1.example.com:443
-proxy-dns-svcb-request = 1, 5
-</pre><a href="#section-4.2-8" class="pilcrow">¶</a>
+:authority = svc.example.com:443
+</pre><a href="#section-6.2-8" class="pilcrow">¶</a>
 </div>
-<p id="section-4.2-9">The proxy establishes the forwarded connection and responds successfully:<a href="#section-4.2-9" class="pilcrow">¶</a></p>
-<div class="lang-example sourcecode" id="section-4.2-10">
+<p id="section-6.2-9">The proxy establishes the connection and responds, signaling the resolved
+target via Proxy-Status:<a href="#section-6.2-9" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.2-10">
 <pre>
-RESPONSE HEADERS
+HEADERS
 :status = 200
-proxy-dns-svcb-response = (1;value=:aGkK: 5;value=:ACAgAA...:);priority=1;target="svc1.example.com"
-</pre><a href="#section-4.2-10" class="pilcrow">¶</a>
+proxy-status: proxy.example; next-hop-aliases="svc1.example.com"
+</pre><a href="#section-6.2-10" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="aliasmode-with-next-hop-aliases-and-close-on">
+<section id="section-6.3">
+        <h3 id="name-aliasmode-with-next-hop-ali">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-aliasmode-with-next-hop-ali" class="section-name selfRef">AliasMode with next-hop-aliases and Close-On</a>
+        </h3>
+<p id="section-6.3-1">The client sends CONNECT requesting SVCB information with both close-on conditions:<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.3-2">
+<pre>
+HEADERS
+:method = CONNECT
+:authority = svc.example.com:443
+proxy-dns-svcb-request: ?1
+proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
+</pre><a href="#section-6.3-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-3">The proxy resolves <code>svc.example.com</code> and encounters an AliasMode RR:<a href="#section-6.3-3" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-6.3-4">
+<pre>
+svc.example.com. 300 IN HTTPS 0 cdn.example.net.
+</pre><a href="#section-6.3-4" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-5">The proxy follows the alias and resolves <code>cdn.example.net</code>:<a href="#section-6.3-5" class="pilcrow">¶</a></p>
+<div class="lang-dns sourcecode" id="section-6.3-6">
+<pre>
+cdn.example.net. 300 IN HTTPS 1 cdn.example.net. alpn=h2,h3 ech=...
+</pre><a href="#section-6.3-6" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-7">Both <code>h3-alpn</code> and <code>ech-defined</code> conditions are satisfied. The proxy closes
+and returns both the AliasMode RR for <code>svc.example.com</code> and the terminal
+ServiceMode RR for <code>cdn.example.net</code> in "Proxy-DNS-SVCB-Response", and signals
+the resolved alias via Proxy-Status:<a href="#section-6.3-7" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.3-8">
+<pre>
+HEADERS
+:status = 307
+proxy-status: proxy.example; next-hop-aliases="cdn.example.net"
+proxy-dns-svcb-response-closed-on: h3-alpn, ech-defined
+proxy-dns-svcb-response: :AAAGYW...:, :AAEGYW...:
+</pre><a href="#section-6.3-8" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-9">The client retries with CONNECT-UDP, using ECH with the keys from the response:<a href="#section-6.3-9" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.3-10">
+<pre>
+HEADERS
+:method = CONNECT-UDP
+:authority = cdn.example.net:443
+proxy-dns-svcb-request: ?1
+</pre><a href="#section-6.3-10" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-11">The proxy establishes the connection and responds:<a href="#section-6.3-11" class="pilcrow">¶</a></p>
+<div class="lang-example sourcecode" id="section-6.3-12">
+<pre>
+HEADERS
+:status = 200
+proxy-dns-svcb-response: :AAEGYW...:
+</pre><a href="#section-6.3-12" class="pilcrow">¶</a>
 </div>
 </section>
 </div>
 </section>
 </div>
 <div id="security-considerations">
-<section id="section-5">
+<section id="section-7">
       <h2 id="name-security-considerations">
-<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
       </h2>
-<p id="section-5-1">TODO Security<a href="#section-5-1" class="pilcrow">¶</a></p>
+<div id="privacy-of-client-preferences">
+<section id="section-7.1">
+        <h3 id="name-privacy-of-client-preferenc">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-privacy-of-client-preferenc" class="section-name selfRef">Privacy of Client Preferences</a>
+        </h3>
+<p id="section-7.1-1">The "Proxy-DNS-SVCB-Request" header field reveals that the client is interested
+in SVCB information for the target. The "Proxy-DNS-SVCB-Request-Close-On" header
+field further reveals the client's connection strategy preferences.<a href="#section-7.1-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="alias-chain-verification">
+<section id="section-7.2">
+        <h3 id="name-alias-chain-verification">
+<a href="#section-7.2" class="section-number selfRef">7.2. </a><a href="#name-alias-chain-verification" class="section-name selfRef">Alias Chain Verification</a>
+        </h3>
+<p id="section-7.2-1">When the proxy follows SVCB aliases, the "Proxy-Status" header field with
+<code>next-hop-aliases</code> allows the client to observe the alias chain. Clients <span class="bcp14">MAY</span> use
+this information to audit the proxy's resolution path and verify that the
+terminal target is consistent with the SVCB response.<a href="#section-7.2-1" class="pilcrow">¶</a></p>
+</section>
+</div>
 </section>
 </div>
 <div id="iana-considerations">
-<section id="section-6">
+<section id="section-8">
       <h2 id="name-iana-considerations">
-<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
       </h2>
-<p id="section-6-1">This document has no IANA actions.<a href="#section-6-1" class="pilcrow">¶</a></p>
+<div id="http-header-field-registrations">
+<section id="section-8.1">
+        <h3 id="name-http-header-field-registrat">
+<a href="#section-8.1" class="section-number selfRef">8.1. </a><a href="#name-http-header-field-registrat" class="section-name selfRef">HTTP Header Field Registrations</a>
+        </h3>
+<p id="section-8.1-1">This document registers the following HTTP header fields in the "Hypertext
+Transfer Protocol (HTTP) Field Name Registry" defined in Section 16.3.1 of
+<span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>:<a href="#section-8.1-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+          <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Field Name</th>
+              <th class="text-left" rowspan="1" colspan="1">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Proxy-DNS-SVCB-Request</td>
+              <td class="text-left" rowspan="1" colspan="1">permanent</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Proxy-DNS-SVCB-Response</td>
+              <td class="text-left" rowspan="1" colspan="1">permanent</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Proxy-DNS-SVCB-Request-Close-On</td>
+              <td class="text-left" rowspan="1" colspan="1">permanent</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">Proxy-DNS-SVCB-Response-Closed-On</td>
+              <td class="text-left" rowspan="1" colspan="1">permanent</td>
+            </tr>
+          </tbody>
+        </table>
 </section>
 </div>
-<div id="todo-list">
-<section id="section-7">
-      <h2 id="name-todo-list">
-<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-todo-list" class="section-name selfRef">TODO List</a>
-      </h2>
-<p id="section-7-1">Interaction with rfc9532
-h3-alpn cannot be used with CONNECT-UDP<a href="#section-7-1" class="pilcrow">¶</a></p>
+<div id="proxy-dns-svcb-request-close-on-token-registry">
+<section id="section-8.2">
+        <h3 id="name-proxy-dns-svcb-request-clos">
+<a href="#section-8.2" class="section-number selfRef">8.2. </a><a href="#name-proxy-dns-svcb-request-clos" class="section-name selfRef">Proxy-DNS-SVCB-Request-Close-On Token Registry</a>
+        </h3>
+<p id="section-8.2-1">This document establishes a new "Proxy-DNS-SVCB-Request-Close-On Tokens"
+registry. The registration policy is Specification Required (<span>[<a href="#RFC8126" class="cite xref">RFC8126</a>]</span>).<a href="#section-8.2-1" class="pilcrow">¶</a></p>
+<p id="section-8.2-2">Initial entries:<a href="#section-8.2-2" class="pilcrow">¶</a></p>
+<table class="center" id="table-2">
+          <caption><a href="#table-2" class="selfRef">Table 2</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Token</th>
+              <th class="text-left" rowspan="1" colspan="1">Description</th>
+              <th class="text-left" rowspan="1" colspan="1">Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">h3-alpn</td>
+              <td class="text-left" rowspan="1" colspan="1">ALPN contains "h3" in highest-priority RR</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">ech-defined</td>
+              <td class="text-left" rowspan="1" colspan="1">ECH SvcParamKey present in highest-priority RR</td>
+              <td class="text-left" rowspan="1" colspan="1">This document</td>
+            </tr>
+          </tbody>
+        </table>
+</section>
+</div>
 </section>
 </div>
 <div id="sec-normative-references">
-<section id="section-8">
+<section id="section-9">
       <h2 id="name-normative-references">
-<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
       </h2>
 <dl class="references">
 <dt id="RFC2119">[RFC2119]</dt>
       <dd>
 <span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc2119">https://www.rfc-editor.org/rfc/rfc2119</a>&gt;</span>. </dd>
 <dd class="break"></dd>
-<dt id="RFC7230">[RFC7230]</dt>
-      <dd>
-<span class="refAuthor">Fielding, R., Ed.</span> and <span class="refAuthor">J. Reschke, Ed.</span>, <span class="refTitle">"Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing"</span>, <span class="seriesInfo">RFC 7230</span>, <span class="seriesInfo">DOI 10.17487/RFC7230</span>, <time datetime="2014-06" class="refDate">June 2014</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7230">https://www.rfc-editor.org/rfc/rfc7230</a>&gt;</span>. </dd>
-<dd class="break"></dd>
 <dt id="RFC7231">[RFC7231]</dt>
       <dd>
 <span class="refAuthor">Fielding, R., Ed.</span> and <span class="refAuthor">J. Reschke, Ed.</span>, <span class="refTitle">"Hypertext Transfer Protocol (HTTP/1.1): Semantics and Content"</span>, <span class="seriesInfo">RFC 7231</span>, <span class="seriesInfo">DOI 10.17487/RFC7231</span>, <time datetime="2014-06" class="refDate">June 2014</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc7231">https://www.rfc-editor.org/rfc/rfc7231</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8126">[RFC8126]</dt>
+      <dd>
+<span class="refAuthor">Cotton, M.</span>, <span class="refAuthor">Leiba, B.</span>, and <span class="refAuthor">T. Narten</span>, <span class="refTitle">"Guidelines for Writing an IANA Considerations Section in RFCs"</span>, <span class="seriesInfo">BCP 26</span>, <span class="seriesInfo">RFC 8126</span>, <span class="seriesInfo">DOI 10.17487/RFC8126</span>, <time datetime="2017-06" class="refDate">June 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8126">https://www.rfc-editor.org/rfc/rfc8126</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC8174">[RFC8174]</dt>
       <dd>
@@ -1754,13 +2066,21 @@ h3-alpn cannot be used with CONNECT-UDP<a href="#section-7-1" class="pilcrow">¶
       <dd>
 <span class="refAuthor">Nottingham, M.</span> and <span class="refAuthor">P. Kamp</span>, <span class="refTitle">"Structured Field Values for HTTP"</span>, <span class="seriesInfo">RFC 8941</span>, <span class="seriesInfo">DOI 10.17487/RFC8941</span>, <time datetime="2021-02" class="refDate">February 2021</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc8941">https://www.rfc-editor.org/rfc/rfc8941</a>&gt;</span>. </dd>
 <dd class="break"></dd>
+<dt id="RFC9110">[RFC9110]</dt>
+      <dd>
+<span class="refAuthor">Fielding, R., Ed.</span>, <span class="refAuthor">Nottingham, M., Ed.</span>, and <span class="refAuthor">J. Reschke, Ed.</span>, <span class="refTitle">"HTTP Semantics"</span>, <span class="seriesInfo">STD 97</span>, <span class="seriesInfo">RFC 9110</span>, <span class="seriesInfo">DOI 10.17487/RFC9110</span>, <time datetime="2022-06" class="refDate">June 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9110">https://www.rfc-editor.org/rfc/rfc9110</a>&gt;</span>. </dd>
+<dd class="break"></dd>
 <dt id="RFC9298">[RFC9298]</dt>
       <dd>
 <span class="refAuthor">Schinazi, D.</span>, <span class="refTitle">"Proxying UDP in HTTP"</span>, <span class="seriesInfo">RFC 9298</span>, <span class="seriesInfo">DOI 10.17487/RFC9298</span>, <time datetime="2022-08" class="refDate">August 2022</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9298">https://www.rfc-editor.org/rfc/rfc9298</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 <dt id="RFC9460">[RFC9460]</dt>
-    <dd>
+      <dd>
 <span class="refAuthor">Schwartz, B.</span>, <span class="refAuthor">Bishop, M.</span>, and <span class="refAuthor">E. Nygren</span>, <span class="refTitle">"Service Binding and Parameter Specification via the DNS (SVCB and HTTPS Resource Records)"</span>, <span class="seriesInfo">RFC 9460</span>, <span class="seriesInfo">DOI 10.17487/RFC9460</span>, <time datetime="2023-11" class="refDate">November 2023</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9460">https://www.rfc-editor.org/rfc/rfc9460</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC9532">[RFC9532]</dt>
+    <dd>
+<span class="refAuthor">Pauly, T.</span>, <span class="refTitle">"HTTP Proxy-Status Parameter for Next-Hop Aliases"</span>, <span class="seriesInfo">RFC 9532</span>, <span class="seriesInfo">DOI 10.17487/RFC9532</span>, <time datetime="2024-01" class="refDate">January 2024</time>, <span>&lt;<a href="https://www.rfc-editor.org/rfc/rfc9532">https://www.rfc-editor.org/rfc/rfc9532</a>&gt;</span>. </dd>
 <dd class="break"></dd>
 </dl>
 </section>
