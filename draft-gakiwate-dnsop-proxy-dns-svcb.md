@@ -221,7 +221,7 @@ proxy-status: proxy.example; next-hop-aliases="cdn.example.net"
 proxy-dns-svcb-response: :AAEGYW...:
 ~~~
 
-# Conditional Connection Closure {#conditional-closure}
+# Conditional Connection Closure {#conditional-connection-closure}
 
 ## Motivation
 
@@ -323,9 +323,7 @@ If one or more conditions are satisfied:
   without an additional DNS resolution.
 
 \[TODO: 307 (Temporary Redirect) is used as a placeholder to signal that the
-request was not fulfilled and the client should retry with different
-parameters. Future revisions of this document may select a different status
-code or define a new one if 307 proves unsuitable.\]
+request was not fulfilled. This may change based on discussions.\]
 
 A proxy that does not support the "Proxy-DNS-SVCB-Request-Close-On" header field
 MUST ignore it and proceed normally.
