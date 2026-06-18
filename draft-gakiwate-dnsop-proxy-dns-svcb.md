@@ -42,11 +42,10 @@ through a proxy, the proxy performs DNS resolution on behalf of the client. This
 prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
 that carry service configuration such as supported protocols and Encrypted
 Client Hello keys. This document defines HTTP header fields that enable the
-proxy to relay SVCB information to the client, describes how the proxy can act
-on SVCB/HTTPS data when establishing the forwarded connection, and introduces a
-conditional early closure mechanism that allows the client to coordinate with
-the proxy to abort a connection when specific SVCB parameters are present, so
-that the client can retry with a different connection strategy.
+proxy to relay SVCB information to the client, and introduces a conditional
+early closure mechanism that allows the client to coordinate with the proxy to
+abort a connection when specific SVCB parameters are present, so that the
+client can retry with a different connection strategy.
 
 --- middle
 
@@ -64,15 +63,12 @@ configuration that influences how connections should be formed, including
 supported application protocols (ALPN), Encrypted Client Hello keys, and
 alternative endpoints.
 
-This document defines three mechanisms that address this gap:
+This document defines two mechanisms that address this gap:
 
 - A pair of HTTP header fields that allow the client to request, and the proxy
   to convey, SVCB parameters for the target ({{requesting-and-receiving-svcb-information}}).
-- Guidance for how the proxy acts on SVCB data when establishing the forwarded
-  connection, including alias resolution and the use of RFC 9532
-  {{!RFC9532}} to signal followed aliases ({{proxy-use-of-svcb-information}}).
 - A conditional closure mechanism that allows the client to request that the
-  proxy abort the connection if certain SVCB conditions are met, returning the
+  proxy abort the connection if certain conditions are met, returning the
   data so the client can retry with a different strategy ({{conditional-connection-closure}}).
 
 # Conventions and Definitions
@@ -97,7 +93,8 @@ parameters from the proxy and receive the resolved data in the response.
 
 The "Proxy-DNS-SVCB-Request" header field is a Structured Field {{!RFC8941}} of
 type sf-boolean. A client includes this header field with a value of `?1` to
-signal that it wants the proxy to return SVCB/HTTPS information for the target.
+signal that it wants the proxy to resolve and return HTTPS resource records for
+the target.
 
 ~~~ example
 proxy-dns-svcb-request: ?1
@@ -106,12 +103,14 @@ proxy-dns-svcb-request: ?1
 ## The Proxy-DNS-SVCB-Response Header Field
 
 The "Proxy-DNS-SVCB-Response" header field is a Structured Field {{!RFC8941}}
-that conveys the SVCB/HTTPS records resolved by the proxy for the target
+that conveys the HTTPS resource records resolved by the proxy for the target
 authority. The field value is an sf-list where each member is an sf-binary item
-containing the RDATA of a single SVCB/HTTPS resource record in wire format as
-defined in Section 2.2 of {{!RFC9460}}.
+containing a single HTTPS resource record in DNS wire format as defined in
+Section 3.2.1 of {{!RFC1035}}. Each encoded record includes the owner name,
+TYPE, CLASS, TTL, and RDATA. Owner names in the encoded records MUST NOT use
+DNS name compression.
 
-The proxy SHOULD include every SVCB/HTTPS record encountered during resolution,
+The proxy SHOULD include every HTTPS record encountered during resolution,
 including any AliasMode records that were followed. This gives the client
 visibility into the full resolution path, not just the terminal records.
 
@@ -119,16 +118,17 @@ visibility into the full resolution path, not just the terminal records.
 proxy-dns-svcb-response: :AAEGYW...:, :AAIHc3...:
 ~~~
 
-Each sf-binary item encodes one complete SVCB/HTTPS RDATA (SvcPriority,
-TargetName, and SvcParams). The client parses each item using the standard SVCB
-wire format.
+Each sf-binary item encodes one complete DNS resource record. The owner name
+identifies the name at which the record was resolved; the RDATA contains the
+SvcPriority, TargetName, and SvcParams as defined in Section 2.2 of
+{{!RFC9460}}.
 
 ### Empty and Absent Responses
 
-If the proxy was unable to resolve SVCB records, or if resolution returned no
-SVCB/HTTPS records for the target, the proxy MUST include the header field with
+If the proxy was unable to resolve HTTPS records, or if resolution returned no
+HTTPS records for the target, the proxy MUST include the header field with
 an empty list. If the header field is absent from the response, the client
-SHOULD treat the SVCB/HTTPS information as unknown.
+SHOULD treat the HTTPS record information as unknown.
 
 ~~~ example
 proxy-dns-svcb-response:
@@ -142,10 +142,10 @@ A client that wishes to receive SVCB/HTTPS information SHOULD include the
 "Proxy-DNS-SVCB-Request" header field in its CONNECT or CONNECT-UDP request.
 
 Upon receiving a "Proxy-DNS-SVCB-Response" header field, the client parses each
-sf-binary member as SVCB/HTTPS RDATA and uses the resulting records to inform
-connection establishment, respecting SvcPriority ordering as defined in
-{{!RFC9460}}. If the header field contains an empty list or is absent, the
-client treats the SVCB/HTTPS information as unknown.
+sf-binary member as a complete DNS resource record and uses the resulting
+records to inform connection establishment, respecting SvcPriority ordering as
+defined in {{!RFC9460}}. If the header field contains an empty list or is
+absent, the client treats the HTTPS record information as unknown.
 
 ### Proxy Behavior
 
@@ -156,10 +156,10 @@ normally. In that case, the response will not include the
 
 A proxy that supports the header field:
 
-- SHOULD perform SVCB/HTTPS resolution for the target authority.
+- SHOULD perform HTTPS RR resolution for the target authority.
 - SHOULD include the "Proxy-DNS-SVCB-Response" header field in its response.
 - MUST include the header field with an empty list if resolution fails or
-  returns no SVCB/HTTPS records.
+  returns no HTTPS records.
 
 ## Example
 
@@ -173,7 +173,8 @@ proxy-dns-svcb-request: ?1
 ~~~
 
 The proxy resolves SVCB records for `svc.example.com` and finds a ServiceMode
-RR with `h3` ALPN and an ECH configuration. The proxy returns the SVCB RDATA:
+RR with `h3` ALPN and an ECH configuration. The proxy returns the HTTPS
+resource record:
 
 ~~~ example
 HEADERS
@@ -183,43 +184,6 @@ proxy-dns-svcb-response: :AAEGYW...:
 
 The client may use the conveyed parameters to use CONNECT-UDP for any future
 connections to `svc.example.com`.
-
-# Proxy Use of SVCB Information
-
-When a proxy resolves SVCB records for the target, it may act on the data when
-establishing the forwarded connection. This section describes how the proxy
-signals its actions back to the client.
-
-## Signaling DNS Name Resolution
-
-When the proxy connects to a name different from the client's original target
-authority, whether due to AliasMode following or a ServiceMode TargetName, the
-proxy SHOULD signal the resolution chain to the client using the
-`next-hop-aliases` parameter of the Proxy-Status header field defined in
-{{!RFC9532}}.
-
-## Example
-
-The client sends a CONNECT request for a target whose SVCB records include an
-alias chain and ECH configuration:
-
-~~~ example
-HEADERS
-:method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?1
-~~~
-
-The proxy resolves `svc.example.com` and finds a ServiceMode RR at
-`cdn.example.net` with `h2` ALPN and an ECH configuration. The proxy connects
-to `cdn.example.net` and returns:
-
-~~~ example
-HEADERS
-:status = 200
-proxy-status: proxy.example; next-hop-aliases="cdn.example.net"
-proxy-dns-svcb-response: :AAEGYW...:
-~~~
 
 # Conditional Connection Closure {#conditional-connection-closure}
 
@@ -270,7 +234,7 @@ ech-defined:
 
 ### Evaluation Rules
 
-The proxy evaluates each recognized token against the resolved SVCB/HTTPS RRset
+The proxy evaluates each recognized token against the resolved HTTPS RRset
 as follows:
 
 - Evaluation is performed against only the highest-priority RR (the RR with the
@@ -309,7 +273,7 @@ proxy-dns-svcb-response-closed-on: h3-alpn
 ### Proxy Behavior
 
 A proxy that supports the "Proxy-DNS-SVCB-Request-Close-On" header field MUST
-evaluate each recognized token against the resolved SVCB/HTTPS RRset prior to
+evaluate each recognized token against the resolved HTTPS RRset prior to
 establishing the forwarded connection.
 
 If one or more conditions are satisfied:
@@ -319,7 +283,7 @@ If one or more conditions are satisfied:
   "Proxy-DNS-SVCB-Response-Closed-On" header field indicating the satisfied
   tokens.
 - The proxy MUST include the "Proxy-DNS-SVCB-Response" header field with the
-  resolved records, so the client can retry using the conveyed information
+  resolved HTTPS records, so the client can retry using the conveyed information
   without an additional DNS resolution.
 
 \[TODO: 307 (Temporary Redirect) is used as a placeholder to signal that the
@@ -378,8 +342,8 @@ proxy-dns-svcb-request: ?0
 ~~~
 
 The client need not request the SVCB/HTTPS data again since it already has the
-information it needs. The client may instead omit the "Proxy-DNS-SVCB-Request"
-header field entirely.
+information it needs. The client signals this by setting "Proxy-DNS-SVCB-Request"
+to `?0`, or by omitting the header field entirely.
 
 # Combined Examples
 
@@ -402,7 +366,7 @@ svc.example.com. 300 IN HTTPS 1 . alpn=h2 ech=...
 
 The TargetName "." indicates the target is the same as the owner name
 (`svc.example.com`). The proxy establishes the connection and returns the
-SVCB RDATA:
+HTTPS resource record:
 
 ~~~ example
 HEADERS
@@ -447,16 +411,14 @@ HEADERS
 :authority = svc.example.com:443
 ~~~
 
-The proxy establishes the connection and responds, signaling the resolved
-target via Proxy-Status:
+The proxy establishes the connection and responds:
 
 ~~~ example
 HEADERS
 :status = 200
-proxy-status: proxy.example; next-hop-aliases="svc1.example.com"
 ~~~
 
-## AliasMode with next-hop-aliases and Close-On
+## AliasMode and Close-On
 
 The client sends CONNECT requesting SVCB information with both close-on conditions:
 
@@ -482,13 +444,11 @@ cdn.example.net. 300 IN HTTPS 1 cdn.example.net. alpn=h2,h3 ech=...
 
 Both `h3-alpn` and `ech-defined` conditions are satisfied. The proxy closes
 and returns both the AliasMode RR for `svc.example.com` and the terminal
-ServiceMode RR for `cdn.example.net` in "Proxy-DNS-SVCB-Response", and signals
-the resolved alias via Proxy-Status:
+ServiceMode RR for `cdn.example.net` in "Proxy-DNS-SVCB-Response":
 
 ~~~ example
 HEADERS
 :status = 307
-proxy-status: proxy.example; next-hop-aliases="cdn.example.net"
 proxy-dns-svcb-response-closed-on: h3-alpn, ech-defined
 proxy-dns-svcb-response: :AAAGYW...:, :AAEGYW...:
 ~~~
@@ -517,13 +477,6 @@ proxy-dns-svcb-response: :AAEGYW...:
 The "Proxy-DNS-SVCB-Request" header field reveals that the client is interested
 in SVCB information for the target. The "Proxy-DNS-SVCB-Request-Close-On" header
 field further reveals the client's connection strategy preferences.
-
-## Alias Chain Verification
-
-When the proxy follows SVCB aliases, the "Proxy-Status" header field with
-`next-hop-aliases` allows the client to observe the alias chain. Clients MAY use
-this information to audit the proxy's resolution path and verify that the
-terminal target is consistent with the SVCB response.
 
 # IANA Considerations
 
