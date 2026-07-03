@@ -120,7 +120,7 @@ the field MAY include a `name` parameter, whose value is an sf-string
 specifying the DNS name to resolve. If the `name` parameter is omitted,
 the proxy resolves the record(s) for the target's own origin.
 
-If the header field is absent, the client is not requesting DNS
+If the header field is absent, the client is not requesting DNS SVCB
 resolution from the proxy.
 
 A proxy that receives a "Proxy-DNS-SVCB-Request" header field whose value is not
@@ -177,10 +177,10 @@ proxy-dns-svcb-response:
 ### Signaling DNS Name Resolution
 
 When returning a `Proxy-DNS-SVCB-Response` header field the proxy SHOULD also
-return a `Proxy-Staus` header field ({{!RFC9209}}) to return a `next-hop` parameter
+return a `Proxy-Status` header field ({{!RFC9209}}) to return a `next-hop` parameter
 and also the `next-hop-aliases` parameter ({{!RFC9532}}).
 These will allow the client to determine how the proxy's connection was made
-and thus if is compatible with a given Selected Endpoint.
+and if it is compatible with a given Selected Endpoint.
 
 
 ## Processing Rules
@@ -215,7 +215,7 @@ if the port of the Selected Endpoint matches that used for the Proxy Target,
   an owner name with the A or AAAA DNS records used to resolve the `next-hop`.)
 
 If the proxy connection is compatible and connection establishment succeeded,
-the client SHOULD continue to use as the Selected Endpoint.
+the client SHOULD continue to use it as the Selected Endpoint.
 
 If the Selected Endpoint is not compatible, the client MUST abandon this
 CONNECT request and establish a new CONNECT/CONNECT-UDP where the client
@@ -238,7 +238,7 @@ A proxy that supports the header field:
 - SHOULD perform a SVCB or HTTPS RR resolution for either the Proxy Target
   name or the value of the `name` attribute if specified.
 - SHOULD include the `Proxy-DNS-SVCB-Response` header field in its response.
-- SHOULD include the `Proxy-Staus` header field with both the
+- SHOULD include the `Proxy-Status` header field with both the
   `next-hop` parameter containing the IP address and `next-hop-aliases`
   parameter containing any CNAMEs.
 - MUST include the header field with an empty list if resolution fails or
@@ -463,7 +463,7 @@ capsule-protocol = ?1
 ~~~
 
 The client need not request the HTTPS RR data again since it already has the
-information it needs. The client signals this by omiting the
+information it needs. The client signals this by omitting the
 "Proxy-DNS-SVCB-Request" header field entirely.
 
 # Combined Examples
@@ -476,7 +476,7 @@ The client requests SVCB information via CONNECT:
 HEADERS
 :method = CONNECT
 :authority = svc.example.com:8000
-proxy-dns-svcb-request: SVCB,name=_8000._foo.svc.example.com
+proxy-dns-svcb-request: SVCB;name="_8000._foo.svc.example.com"
 ~~~
 
 The proxy resolves the SVCB RR for svc.example.com and returns
@@ -586,7 +586,7 @@ cdn2.example.net. 300 IN HTTPS 1 . alpn=h2,h3 ech=...
 ~~~
 
 Both `h3-alpn` and `ech-defined` conditions are satisfied. The proxy cancels
-and returns both the AliasMode RR for `svc.example.com`,
+and returns both the AliasMode RR for `www.example.com`,
 the CNAME for `cdn.example`, and the terminal
 ServiceMode RR for `cdn2.example.net` in "Proxy-DNS-SVCB-Response":
 
@@ -628,7 +628,6 @@ proxy-status: proxy.example; next-hop="2001:db8:a::c"
 Over this connection the client establishes its HTTP/3 HTTPS connection
 to `www.example.com`.
 
-
 ## Cancel-On and HTTP connections to insecure port 80
 
 The client sends CONNECT requesting HTTPS RRs
@@ -650,7 +649,7 @@ www.example.com. 3600 IN CNAME cdn.example.
 cdn.example.      600 IN HTTPS 1 . alpn=h2 ech=...
 ~~~
 
-Because the `https` condition is satified, the proxy cancels
+Because the `https` condition is satisfied, the proxy cancels
 and returns both DNS RRs in "Proxy-DNS-SVCB-Response":
 
 ~~~ example
@@ -706,7 +705,7 @@ in the case of ECH being present.
 
 Clients MUST NOT rely on "Proxy-DNS-SVCB-Request-Cancel-On" with `ech-defined`
 for sending H/2 or H/3 DATA frames along with the CONNECT request unless
-they have an out-of-band way of ensuring this is supposted by the Proxy.
+they have an out-of-band way of ensuring this is supported by the Proxy.
 
 ## Reuse of HTTP connections to the proxy
 
