@@ -1,8 +1,8 @@
 <!-- regenerate: on (set to off if you edit this file) -->
 
-# HTTP Proxy-Status Parameter for DNS SVCB Information
+# HTTP Header Fields for Proxying DNS SVCB Information
 
-This is the working area for the individual Internet-Draft, "HTTP Proxy-Status Parameter for DNS SVCB Information".
+This is the working area for the individual Internet-Draft, "HTTP Header Fields for Proxying DNS SVCB Information".
 
 * [Editor's Copy](https://gakiwate.github.io/draft-gakiwate-dnsop-proxy-dns-svcb/#go.draft-gakiwate-dnsop-proxy-dns-svcb.html)
 * [Datatracker Page](https://datatracker.ietf.org/doc/draft-gakiwate-dnsop-proxy-dns-svcb)
@@ -13,7 +13,7 @@ This is the working area for the individual Internet-Draft, "HTTP Proxy-Status P
 ## Contributing
 
 See the
-[guidelines for contributions](https://github.com/gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb/blob//CONTRIBUTING.md).
+[guidelines for contributions](https://github.com/gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb/blob/main/CONTRIBUTING.md).
 
 The contributing file also has tips on how to make contributions, if you
 don't already know how to do that.
