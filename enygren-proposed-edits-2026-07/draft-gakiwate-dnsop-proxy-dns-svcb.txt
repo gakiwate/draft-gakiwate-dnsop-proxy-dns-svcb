@@ -201,7 +201,7 @@ Table of Contents
    omitted, the proxy resolves the record(s) for the target's own
    origin.
 
-   If the header field is absent, the client is not requesting DNS
+   If the header field is absent, the client is not requesting DNS SVCB
    resolution from the proxy.
 
    A proxy that receives a "Proxy-DNS-SVCB-Request" header field whose
@@ -251,10 +251,10 @@ Table of Contents
 3.2.2.  Signaling DNS Name Resolution
 
    When returning a Proxy-DNS-SVCB-Response header field the proxy
-   SHOULD also return a Proxy-Staus header field ([RFC9209]) to return a
-   next-hop parameter and also the next-hop-aliases parameter
+   SHOULD also return a Proxy-Status header field ([RFC9209]) to return
+   a next-hop parameter and also the next-hop-aliases parameter
    ([RFC9532]).  These will allow the client to determine how the
-   proxy's connection was made and thus if is compatible with a given
+   proxy's connection was made and if it is compatible with a given
    Selected Endpoint.
 
 3.3.  Processing Rules
@@ -296,7 +296,7 @@ Table of Contents
       used to resolve the next-hop.)
 
    If the proxy connection is compatible and connection establishment
-   succeeded, the client SHOULD continue to use as the Selected
+   succeeded, the client SHOULD continue to use it as the Selected
    Endpoint.
 
    If the Selected Endpoint is not compatible, the client MUST abandon
@@ -322,9 +322,9 @@ Table of Contents
    *  SHOULD include the Proxy-DNS-SVCB-Response header field in its
       response.
 
-   *  SHOULD include the Proxy-Staus header field with both the next-hop
-      parameter containing the IP address and next-hop-aliases parameter
-      containing any CNAMEs.
+   *  SHOULD include the Proxy-Status header field with both the next-
+      hop parameter containing the IP address and next-hop-aliases
+      parameter containing any CNAMEs.
 
    *  MUST include the header field with an empty list if resolution
       fails or returns no SVCB/HTTPS records.
@@ -546,8 +546,8 @@ Table of Contents
    capsule-protocol = ?1
 
    The client need not request the HTTPS RR data again since it already
-   has the information it needs.  The client signals this by omiting the
-   "Proxy-DNS-SVCB-Request" header field entirely.
+   has the information it needs.  The client signals this by omitting
+   the "Proxy-DNS-SVCB-Request" header field entirely.
 
 5.  Combined Examples
 
@@ -558,7 +558,7 @@ Table of Contents
    HEADERS
    :method = CONNECT
    :authority = svc.example.com:8000
-   proxy-dns-svcb-request: SVCB,name=_8000._foo.svc.example.com
+   proxy-dns-svcb-request: SVCB;name="_8000._foo.svc.example.com"
 
    The proxy resolves the SVCB RR for svc.example.com and returns it in
    a header:
@@ -647,7 +647,7 @@ Table of Contents
    cdn2.example.net. 300 IN HTTPS 1 . alpn=h2,h3 ech=...
 
    Both h3-alpn and ech-defined conditions are satisfied.  The proxy
-   cancels and returns both the AliasMode RR for svc.example.com, the
+   cancels and returns both the AliasMode RR for www.example.com, the
    CNAME for cdn.example, and the terminal ServiceMode RR for
    cdn2.example.net in "Proxy-DNS-SVCB-Response":
 
@@ -699,7 +699,7 @@ Table of Contents
    www.example.com. 3600 IN CNAME cdn.example.
    cdn.example.      600 IN HTTPS 1 . alpn=h2 ech=...
 
-   Because the https condition is satified, the proxy cancels and
+   Because the https condition is satisfied, the proxy cancels and
    returns both DNS RRs in "Proxy-DNS-SVCB-Response":
 
    HEADERS
@@ -749,7 +749,7 @@ Table of Contents
    Clients MUST NOT rely on "Proxy-DNS-SVCB-Request-Cancel-On" with ech-
    defined for sending H/2 or H/3 DATA frames along with the CONNECT
    request unless they have an out-of-band way of ensuring this is
-   supposted by the Proxy.
+   supported by the Proxy.
 
 6.3.  Reuse of HTTP connections to the proxy
 
