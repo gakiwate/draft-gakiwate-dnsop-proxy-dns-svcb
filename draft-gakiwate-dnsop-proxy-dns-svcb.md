@@ -41,7 +41,7 @@ informative:
 
 --- abstract
 
-When HTTP clients use the CONNECT or CONNECT-UDP methods to reach target servers
+When HTTP clients use the CONNECT method or UDP proxying (CONNECT-UDP) to reach target servers
 through a proxy, the proxy performs DNS resolution on behalf of the client. This
 prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
 that carry service configuration such as supported protocols and Encrypted
@@ -59,6 +59,10 @@ The CONNECT method {{!RFC9110}} and the CONNECT-UDP method {{!RFC9298}} allow
 HTTP clients to establish TCP or UDP flows to target servers through an HTTP
 proxy. The client identifies the Proxy Target using authority-form (in {{!RFC9110}}),
 or a URI Template {{!RFC6570}} for CONNECT-UDP.  The Proxy Target includes a
+The CONNECT method {{!RFC9110}} and UDP proxying ("connect-udp", defined in {{!RFC9298}}) allow
+HTTP clients to establish TCP or UDP flows to target servers through an HTTP
+proxy. The client identifies the Proxy Target using authority-form (in {{!RFC9110}}),
+or a URI Template {{!RFC6570}} for UDP proxying.  The Proxy Target includes a
 server name or IP address and a port number. When the Proxy Target is a name, the
 proxy resolves it to an IP address using A or AAAA queries.
 
@@ -136,7 +140,7 @@ proxy-dns-svcb-request: SVCB;name="_dns.example.com"
 ~~~
 
 A proxy MAY choose to ignore the "Proxy-DNS-SVCB-Request" header field
-if it is unrelated to the Proxy Target name.
+if it is not known to be related to the Proxy Target name.
 
 
 ## The Proxy-DNS-SVCB-Response Header Field
@@ -203,7 +207,7 @@ the client MUST ensure that it is compatible.
 
 An established connection is compatible if the protocol (TCP or UDP) of
 the Selected Endpoint matches what was used
-to establish the connection (ie, via CONNECT or CONNECT-TCP),
+to establish the connection (ie, via CONNECT or UDP proxying),
 if the port of the Selected Endpoint matches that used for the Proxy Target,
 *and* if at least one of the following applies:
 
