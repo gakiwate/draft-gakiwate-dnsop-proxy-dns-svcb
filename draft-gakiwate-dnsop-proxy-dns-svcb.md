@@ -55,7 +55,7 @@ client can retry with a different connection strategy.
 
 # Introduction
 
-The CONNECT method {{!RFC9110}} and the CONNECT-UDP method {{!RFC9298}} allow
+The CONNECT method {{!RFC9110}} and UDP proxying {{!RFC9298}} via Extended CONNECT allow
 HTTP clients to establish TCP or UDP flows to target servers through an HTTP
 proxy. The client identifies the Proxy Target using authority-form (in {{!RFC9110}}),
 or a URI Template {{!RFC6570}} for CONNECT-UDP.  The Proxy Target includes a
