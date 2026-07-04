@@ -9,7 +9,7 @@
 <meta content="Tommy Pauly" name="author">
 <meta content="Erik Nygren" name="author">
 <meta content="
-       When HTTP clients use the CONNECT or CONNECT-UDP methods to reach target servers
+       When HTTP clients use the CONNECT method or UDP proxying (CONNECT-UDP) to reach target servers
 through a proxy, the proxy performs DNS resolution on behalf of the client. This
 prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
 that carry service configuration such as supported protocols and Encrypted
@@ -1096,7 +1096,7 @@ svg {
 <h1 id="title">HTTP Header Fields for Proxying DNS SVCB Information</h1>
 <section id="section-abstract">
       <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
-<p id="section-abstract-1">When HTTP clients use the CONNECT or CONNECT-UDP methods to reach target servers
+<p id="section-abstract-1">When HTTP clients use the CONNECT method or UDP proxying (CONNECT-UDP) to reach target servers
 through a proxy, the proxy performs DNS resolution on behalf of the client. This
 prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
 that carry service configuration such as supported protocols and Encrypted
@@ -1318,6 +1318,10 @@ client can retry with a different connection strategy.<a href="#section-abstract
 HTTP clients to establish TCP or UDP flows to target servers through an HTTP
 proxy. The client identifies the Proxy Target using authority-form (in <span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>),
 or a URI Template <span>[<a href="#RFC6570" class="cite xref">RFC6570</a>]</span> for CONNECT-UDP.  The Proxy Target includes a
+The CONNECT method <span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span> and UDP proxying ("connect-udp", defined in <span>[<a href="#RFC9298" class="cite xref">RFC9298</a>]</span>) allow
+HTTP clients to establish TCP or UDP flows to target servers through an HTTP
+proxy. The client identifies the Proxy Target using authority-form (in <span>[<a href="#RFC9110" class="cite xref">RFC9110</a>]</span>),
+or a URI Template <span>[<a href="#RFC6570" class="cite xref">RFC6570</a>]</span> for UDP proxying.  The Proxy Target includes a
 server name or IP address and a port number. When the Proxy Target is a name, the
 proxy resolves it to an IP address using A or AAAA queries.<a href="#section-1-1" class="pilcrow">¶</a></p>
 <p id="section-1-2">This arrangement prevents the client from accessing Service Binding (SVCB and
@@ -1425,7 +1429,7 @@ proxy-dns-svcb-request: SVCB;name="_dns.example.com"
 </pre><a href="#section-3.1-7" class="pilcrow">¶</a>
 </div>
 <p id="section-3.1-8">A proxy <span class="bcp14">MAY</span> choose to ignore the "Proxy-DNS-SVCB-Request" header field
-if it is unrelated to the Proxy Target name.<a href="#section-3.1-8" class="pilcrow">¶</a></p>
+if it is not known to be related to the Proxy Target name.<a href="#section-3.1-8" class="pilcrow">¶</a></p>
 </section>
 </div>
 <div id="the-proxy-dns-svcb-response-header-field">
@@ -1506,7 +1510,7 @@ meaning that SVCB resolution has failed, and the list of available endpoints is 
 the client <span class="bcp14">MUST</span> ensure that it is compatible.<a href="#section-3.3.1-3" class="pilcrow">¶</a></p>
 <p id="section-3.3.1-4">An established connection is compatible if the protocol (TCP or UDP) of
 the Selected Endpoint matches what was used
-to establish the connection (ie, via CONNECT or CONNECT-TCP),
+to establish the connection (ie, via CONNECT or UDP proxying),
 if the port of the Selected Endpoint matches that used for the Proxy Target,
 <em>and</em> if at least one of the following applies:<a href="#section-3.3.1-4" class="pilcrow">¶</a></p>
 <ul class="normal">
