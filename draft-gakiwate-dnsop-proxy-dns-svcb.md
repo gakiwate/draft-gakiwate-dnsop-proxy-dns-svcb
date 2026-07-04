@@ -96,7 +96,7 @@ The following terms are used throughout this document:
 - **Proxy Target**: The target server name (or IP address), target port, and protocol
   that the client has requested the proxy connect to,
   as specified in the authority-form (for CONNECT)
-  or in a URI Template (for CONNECT-UDP).
+  or in a URI Template (for UDP proxying).
 
 # Requesting and Receiving SVCB Information
 
