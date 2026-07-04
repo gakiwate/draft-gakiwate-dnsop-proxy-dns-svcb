@@ -28,6 +28,10 @@ author:
     fullname: Tommy Pauly
     organization: Apple Inc
     email: "tpauly@apple.com"
+ -
+    fullname: Erik Nygren
+    organization: Akamai Technologies
+    email: "erik+ietf@nygren.org"
 
 normative:
 
@@ -37,7 +41,7 @@ informative:
 
 --- abstract
 
-When HTTP clients use the CONNECT or CONNECT-UDP methods to reach target servers
+When HTTP clients use the CONNECT method or UDP proxying (CONNECT-UDP) to reach target servers
 through a proxy, the proxy performs DNS resolution on behalf of the client. This
 prevents the client from accessing Service Binding (SVCB and HTTPS) DNS records
 that carry service configuration such as supported protocols and Encrypted
@@ -51,10 +55,15 @@ client can retry with a different connection strategy.
 
 # Introduction
 
-The CONNECT method {{!RFC7231}} and the CONNECT-UDP method {{!RFC9298}} allow
+The CONNECT method {{!RFC9110}} and UDP proxying {{!RFC9298}} via Extended CONNECT allow
 HTTP clients to establish TCP or UDP flows to target servers through an HTTP
-proxy. The client identifies the target using authority-form, which includes a
-server name or IP address and a port number. When the target is a name, the
+proxy. The client identifies the Proxy Target using authority-form (in {{!RFC9110}}),
+or a URI Template {{!RFC6570}} for CONNECT-UDP.  The Proxy Target includes a
+The CONNECT method {{!RFC9110}} and UDP proxying ("connect-udp", defined in {{!RFC9298}}) allow
+HTTP clients to establish TCP or UDP flows to target servers through an HTTP
+proxy. The client identifies the Proxy Target using authority-form (in {{!RFC9110}}),
+or a URI Template {{!RFC6570}} for UDP proxying.  The Proxy Target includes a
+server name or IP address and a port number. When the Proxy Target is a name, the
 proxy resolves it to an IP address using A or AAAA queries.
 
 This arrangement prevents the client from accessing Service Binding (SVCB and
@@ -83,22 +92,56 @@ The following terms are used throughout this document:
   as defined in {{!RFC9460}}.
 - **Highest-priority RR**: The ServiceMode RR in a resolved RRset with the
   lowest non-zero SvcPriority value.
+- **Selected Endpoint**: The SVCB or HTTPS resource record selected
+  by the client to use, as defined by the algorithm in {{!RFC9460}} Section 3.
+- **Selected TargetName**: The TargetName of the Selected Endpoint.
+  When the TargetName of the resource record is ".",
+  the Selected TargetName is the owner name of the resource record.
+- **Proxy Target**: The target server name (or IP address), target port, and protocol
+  that the client has requested the proxy connect to,
+  as specified in the authority-form (for CONNECT)
+  or in a URI Template (for UDP proxying).
 
 # Requesting and Receiving SVCB Information
 
 This section defines two HTTP header fields that allow a client to request SVCB
 parameters from the proxy and receive the resolved data in the response.
 
+
 ## The Proxy-DNS-SVCB-Request Header Field
 
-The "Proxy-DNS-SVCB-Request" header field is a Structured Field {{!RFC8941}} of
-type sf-boolean. A client includes this header field with a value of `?1` to
-signal that it wants the proxy to resolve and return HTTPS resource records for
-the target.
+The "Proxy-DNS-SVCB-Request" header field is a Structured Field {{!RFC8941}}
+whose value MUST be an sf-token. A client includes this header field to
+signal that it wants the proxy to resolve and return DNS resource records
+of the indicated type for the target. The token value MUST be `SVCB`
+or another SVCB-compatible record type (such as `HTTPS`):
+
+- `SVCB`: the proxy is requested to resolve SVCB resource records.
+- `HTTPS`: the proxy is requested to resolve HTTPS resource records.
+
+For SVCB records that are on a different name from the Proxy Target name,
+the field MAY include a `name` parameter, whose value is an sf-string
+specifying the DNS name to resolve. If the `name` parameter is omitted,
+the proxy resolves the record(s) for the target's own origin.
+
+If the header field is absent, the client is not requesting DNS SVCB
+resolution from the proxy.
+
+A proxy that receives a "Proxy-DNS-SVCB-Request" header field whose value is not
+`SVCB`, `HTTPS`, or another SVCB-compatible RR type that it recognizes
+MUST ignore the header field.
 
 ~~~ example
-proxy-dns-svcb-request: ?1
+proxy-dns-svcb-request: HTTPS
 ~~~
+
+~~~ example
+proxy-dns-svcb-request: SVCB;name="_dns.example.com"
+~~~
+
+A proxy MAY choose to ignore the "Proxy-DNS-SVCB-Request" header field
+if it is not known to be related to the Proxy Target name.
+
 
 ## The Proxy-DNS-SVCB-Response Header Field
 
@@ -110,9 +153,10 @@ Section 3.2.1 of {{!RFC1035}}. Each encoded record includes the owner name,
 TYPE, CLASS, TTL, and RDATA. Owner names in the encoded records MUST NOT use
 DNS name compression.
 
-The proxy SHOULD include every HTTPS record encountered during resolution,
-including any AliasMode records that were followed. This gives the client
-visibility into the full resolution path, not just the terminal records.
+The proxy SHOULD include every SVCB or HTTPS record encountered during
+resolution, including any AliasMode records that were followed. This
+gives the client visibility into the full resolution path, not just
+the terminal records.
 
 ~~~ example
 proxy-dns-svcb-response: :AAEGYW...:, :AAIHc3...:
@@ -134,6 +178,15 @@ SHOULD treat the HTTPS record information as unknown.
 proxy-dns-svcb-response:
 ~~~
 
+### Signaling DNS Name Resolution
+
+When returning a `Proxy-DNS-SVCB-Response` header field the proxy SHOULD also
+return a `Proxy-Status` header field ({{!RFC9209}}) to return a `next-hop` parameter
+and also the `next-hop-aliases` parameter ({{!RFC9532}}).
+These will allow the client to determine how the proxy's connection was made
+and if it is compatible with a given Selected Endpoint.
+
+
 ## Processing Rules
 
 ### Client Behavior
@@ -143,9 +196,39 @@ A client that wishes to receive SVCB/HTTPS information SHOULD include the
 
 Upon receiving a "Proxy-DNS-SVCB-Response" header field, the client parses each
 sf-binary member as a complete DNS resource record and uses the resulting
-records to inform connection establishment, respecting SvcPriority ordering as
-defined in {{!RFC9460}}. If the header field contains an empty list or is
-absent, the client treats the HTTPS record information as unknown.
+records to inform connection establishment, following the algorithm defined
+in {{!RFC9460}} Section 3 to pick a Selected Endpoint.
+If the header field contains an empty list or is
+absent, the client treats the SVCB/HTTPS record information as unknown
+meaning that SVCB resolution has failed, and the list of available endpoints is empty.
+
+Prior to using a connection established by the proxy as a Selected Endpoint,
+the client MUST ensure that it is compatible.
+
+An established connection is compatible if the protocol (TCP or UDP) of
+the Selected Endpoint matches what was used
+to establish the connection (ie, via CONNECT or UDP proxying),
+if the port of the Selected Endpoint matches that used for the Proxy Target,
+*and* if at least one of the following applies:
+
+* The Selected TargetName matches the Proxy Target for the connection.
+* An `ipv4hint` or `ipv6hint` SvcParam from the Selected Endpoint matches the `next-hop`
+  parameter returned from the `Proxy-Status` header field.
+* The final name in the `next-hop-aliases` of the `Proxy-Status` header field
+  matches the Selected TargetName.  (ie, that the Selected TargetName shares
+  an owner name with the A or AAAA DNS records used to resolve the `next-hop`.)
+
+If the proxy connection is compatible and connection establishment succeeded,
+the client SHOULD continue to use it as the Selected Endpoint.
+
+If the Selected Endpoint is not compatible, the client MUST abandon this
+CONNECT request and establish a new CONNECT/CONNECT-UDP where the client
+provides the final Selected TargetName and port to the proxy as a new Proxy Target,
+as described in {{!RFC9460}} Section 3.2.
+
+Clients SHOULD obey the TTLs in the DNS RRs and request new ones
+on subsequent requests if previously cached ones have expired in cache.
+
 
 ### Proxy Behavior
 
@@ -156,10 +239,15 @@ normally. In that case, the response will not include the
 
 A proxy that supports the header field:
 
-- SHOULD perform HTTPS RR resolution for the target authority.
-- SHOULD include the "Proxy-DNS-SVCB-Response" header field in its response.
+- SHOULD perform a SVCB or HTTPS RR resolution for either the Proxy Target
+  name or the value of the `name` attribute if specified.
+- SHOULD include the `Proxy-DNS-SVCB-Response` header field in its response.
+- SHOULD include the `Proxy-Status` header field with both the
+  `next-hop` parameter containing the IP address and `next-hop-aliases`
+  parameter containing any CNAMEs.
 - MUST include the header field with an empty list if resolution fails or
-  returns no HTTPS records.
+  returns no SVCB/HTTPS records.
+
 
 ## Example
 
@@ -168,11 +256,11 @@ The client sends a CONNECT request requesting SVCB information:
 ~~~ example
 HEADERS
 :method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?1
+:authority = www.example.com:443
+proxy-dns-svcb-request: HTTPS
 ~~~
 
-The proxy resolves SVCB records for `svc.example.com` and finds a ServiceMode
+The proxy resolves HTTPS records for `www.example.com` and finds a ServiceMode
 RR with `h3` ALPN and an ECH configuration. The proxy returns the HTTPS
 resource record:
 
@@ -180,10 +268,22 @@ resource record:
 HEADERS
 :status = 200
 proxy-dns-svcb-response: :AAEGYW...:
+proxy-status: proxy.example; next-hop="2001:db8:a::b"
+~~~
+
+where the proxy-dns-svcb-response contains the DNS RR:
+
+~~~ example
+www.example.com. 300 IN HTTPS 1 . alpn=h2,h3 ipv6hint="2001:db8:a::b" ech=...
 ~~~
 
 The client may use the conveyed parameters to use CONNECT-UDP for any future
-connections to `svc.example.com`.
+connections to `www.example.com`.
+
+It may also reuse the established connection with the HTTPS record containing
+the ECH configuration since the Selected TargetName from the HTTPS record was
+`www.example.com` and because its `ipv6hint` SvcParam includes `2001:db8:a::b`.
+
 
 # Conditional Connection Closure {#conditional-connection-closure}
 
@@ -196,16 +296,21 @@ publishes ECH keys.
 
 Without coordination, the client learns this only after the proxy has
 established the forwarded connection. Tearing that connection down and
-retrying wastes a round trip. The mechanism in this section lets the client
+retrying wastes potentially multiple round trips in the case of HTTP/1.1.
+The mechanism in this section lets the client
 signal conditions under which the proxy should abort before connecting and
 return the SVCB data immediately.
 
-## The Proxy-DNS-SVCB-Request-Close-On Header Field
+The mechanism in this section also enables a client using HTTP/2 or HTTP/3
+to pipeline DATA frames with a TLS ClientHello with a reduced chance that
+those will leak TLS SNI information to services supporting ECH.
 
-The "Proxy-DNS-SVCB-Request-Close-On" header field is a Structured Field
+## The Proxy-DNS-SVCB-Request-Cancel-On Header Field
+
+The "Proxy-DNS-SVCB-Request-Cancel-On" header field is a Structured Field
 {{!RFC8941}} whose value is an sf-list of sf-token items. Each token names a
 condition that, if satisfied by the resolved SVCB data, should cause the proxy
-to close the request without establishing the forwarded connection.
+to skip the request without establishing the forwarded connection.
 
 The set of tokens is open-ended, and any token that the client and proxy
 mutually understand can be used; this document defines an initial set of tokens
@@ -214,7 +319,7 @@ additional tokens registered through the process described in
 {{iana-considerations}} or agreed upon out-of-band.
 
 ~~~ example
-proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
+proxy-dns-svcb-request-cancel-on: h3-alpn, ech-defined
 ~~~
 
 ### Initial Tokens
@@ -232,9 +337,15 @@ ech-defined:
   highest-priority RR. A client includes this token when it prefers to use
   Encrypted Client Hello when connecting to the target.
 
+https:
+: The condition is satisfied if any HTTPS RR is found.
+  This indicates that the client must not establish an insecure HTTP connection.
+
+
+
 ### Evaluation Rules
 
-The proxy evaluates each recognized token against the resolved HTTPS RRset
+The proxy evaluates each recognized token against the resolved SVCB/HTTPS RRset
 as follows:
 
 - Evaluation is performed against only the highest-priority RR (the RR with the
@@ -253,55 +364,66 @@ trigger closure if any RR in the RRset satisfies a condition, rather than only
 the highest-priority RR. The evaluation rules above apply to the tokens defined
 in this document; new tokens define their own.
 
-## The Proxy-DNS-SVCB-Response-Closed-On Header Field
+## The Proxy-DNS-SVCB-Response-Cancelled-On Header Field
 
-The "Proxy-DNS-SVCB-Response-Closed-On" header field is a Structured Field
+The "Proxy-DNS-SVCB-Response-Cancelled-On" header field is a Structured Field
 {{!RFC8941}} whose value is an sf-list of sf-token items. The proxy includes
-this header field when it closes a request due to a satisfied condition.
+this header field when it cancels making the connect
+request due to a satisfied condition.
 
 - The proxy MUST report all tokens whose conditions were satisfied.
 - The proxy MUST NOT include tokens that were absent from the client's
-  "Proxy-DNS-SVCB-Request-Close-On" header field.
+  "Proxy-DNS-SVCB-Request-Cancel-On" header field.
 - The proxy MUST NOT include tokens whose conditions were not satisfied.
 
 ~~~ example
-proxy-dns-svcb-response-closed-on: h3-alpn
+proxy-dns-svcb-response-cancelled-on: h3-alpn
 ~~~
 
 ## Processing Rules
 
 ### Proxy Behavior
 
-A proxy that supports the "Proxy-DNS-SVCB-Request-Close-On" header field MUST
-evaluate each recognized token against the resolved HTTPS RRset prior to
+A proxy that supports the "Proxy-DNS-SVCB-Request-Cancel-On" header field MUST
+evaluate each recognized token against the resolved SVCB/HTTPS RRset prior to
 establishing the forwarded connection.
 
 If one or more conditions are satisfied:
 
 - The proxy SHOULD NOT establish the forwarded connection.
-- The proxy SHOULD close the request with HTTP status code 307 and include the
-  "Proxy-DNS-SVCB-Response-Closed-On" header field indicating the satisfied
+- The proxy SHOULD cancel the request with HTTP status code 307 and include the
+  "Proxy-DNS-SVCB-Response-Cancelled-On" header field indicating the satisfied
   tokens.
 - The proxy MUST include the "Proxy-DNS-SVCB-Response" header field with the
   resolved HTTPS records, so the client can retry using the conveyed information
   without an additional DNS resolution.
 
 \[TODO: 307 (Temporary Redirect) is used as a placeholder to signal that the
-request was not fulfilled. This may change based on discussions.\]
+request was not fulfilled. This may change based on discussions.
+We may wish to specify that Location not be sent.  We may
+also wish to consider moving Proxy-DNS-SVCB-Response-Cancelled-On into
+Proxy-Status.
+\]
 
-A proxy that does not support the "Proxy-DNS-SVCB-Request-Close-On" header field
+A proxy that does not support the "Proxy-DNS-SVCB-Request-Cancel-On" header field
 MUST ignore it and proceed normally.
 
 ### Client Behavior
 
-Upon receiving a "Proxy-DNS-SVCB-Response-Closed-On" header field, the client
+Clients establishing an insecure HTTP connection to port 80 SHOULD
+send `https` as a "Proxy-DNS-SVCB-Request-Cancel-On" value.
+
+Upon receiving a "Proxy-DNS-SVCB-Response-Cancelled-On" header field, the client
 parses the accompanying "Proxy-DNS-SVCB-Response" and inspects the satisfied
 tokens to determine its retry strategy:
 
-- If "h3-alpn" is present, the client SHOULD retry using CONNECT-UDP with ALPN
+- If `h3-alpn` is present, the client SHOULD retry using CONNECT-UDP with ALPN
   values from the highest-priority RR in the conveyed records.
-- If "ech-defined" is present, the client SHOULD retry using Encrypted Client
+- If `ech-defined` is present, the client SHOULD retry using Encrypted Client
   Hello with the ECH keys from the highest-priority RR in the conveyed records.
+- If `https` is present, the client MUST upgrade to an HTTPS request
+  as described in {{!RFC9460}}.
+
 
 ## Example
 
@@ -311,24 +433,24 @@ CONNECT-UDP if the target supports it by including the h3-alpn token:
 ~~~ example
 HEADERS
 :method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?1
-proxy-dns-svcb-request-close-on: h3-alpn
+:authority = www.example.com
+proxy-dns-svcb-request: HTTPS
+proxy-dns-svcb-request-cancel-on: h3-alpn
 ~~~
 
 The proxy resolves a single ServiceMode RR:
 
 ~~~ dns
-svc.example.com. 300 IN HTTPS 1 . alpn=h2,h3
+www.example.com. 300 IN HTTPS 1 www.example.com alpn=h2,h3
 ~~~
 
 The highest-priority RR contains `h3` in ALPN, so the condition is satisfied.
-The proxy closes the request:
+The proxy cancels the request and does not make the connection:
 
 ~~~ example
 HEADERS
 :status = 307
-proxy-dns-svcb-response-closed-on: h3-alpn
+proxy-dns-svcb-response-cancelled-on: h3-alpn
 proxy-dns-svcb-response: :AAEGYW...:
 ~~~
 
@@ -336,14 +458,17 @@ The client observes the satisfied condition and retries with CONNECT-UDP:
 
 ~~~ example
 HEADERS
-:method = CONNECT-UDP
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?0
+:method = CONNECT
+:protocol = connect-udp
+:scheme = https
+:path = /.well-known/masque/udp/www.example.com/443/
+:authority = proxy.example
+capsule-protocol = ?1
 ~~~
 
-The client need not request the SVCB/HTTPS data again since it already has the
-information it needs. The client signals this by setting "Proxy-DNS-SVCB-Request"
-to `?0`, or by omitting the header field entirely.
+The client need not request the HTTPS RR data again since it already has the
+information it needs. The client signals this by omitting the
+"Proxy-DNS-SVCB-Request" header field entirely.
 
 # Combined Examples
 
@@ -354,61 +479,74 @@ The client requests SVCB information via CONNECT:
 ~~~ example
 HEADERS
 :method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?1
+:authority = svc.example.com:8000
+proxy-dns-svcb-request: SVCB;name="_8000._foo.svc.example.com"
 ~~~
 
-The proxy resolves a single ServiceMode RR:
-
-~~~ dns
-svc.example.com. 300 IN HTTPS 1 . alpn=h2 ech=...
-~~~
-
-The TargetName "." indicates the target is the same as the owner name
-(`svc.example.com`). The proxy establishes the connection and returns the
-HTTPS resource record:
+The proxy resolves the SVCB RR for svc.example.com and returns
+it in a header:
 
 ~~~ example
 HEADERS
 :status = 200
 proxy-dns-svcb-response: :AAEGYW...:
+proxy-status: proxy.example; next-hop="2001:db8:a::b"
 ~~~
+
+Within `proxy-dns-svcb-response` is the single DNS RR:
+
+~~~ dns
+_8000._foo.svc.example.com. 300 IN SVCB 1 svc.example.com port=8000 ech=...
+~~~
+
+The client selecting to use this ServiceMode RR
+confirms that the Selected TargetName matches the Proxy Target used
+(also `svc.example.com`) and that the ports match (8000)
+so it is able to use the proxy connection
+and send a TLS ClientHello using ECH and the SVCB record.
+
 
 ## Multiple RRs with Different Priorities
 
-The client sends CONNECT requesting SVCB information with `h3-alpn` close-on:
+The client sends CONNECT requesting SVCB information with `h3-alpn` cancel-on:
 
 ~~~ example
 HEADERS
 :method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?1
-proxy-dns-svcb-request-close-on: h3-alpn
+:authority = www.example.com:443
+proxy-dns-svcb-request: HTTPS
+proxy-dns-svcb-request-cancel-on: h3-alpn
 ~~~
 
 The proxy resolves two RRs:
 
 ~~~ dns
-svc.example.com. 300 IN HTTPS 1 svc1.example.com. alpn=h2,h3 ech=...
-svc.example.com. 300 IN HTTPS 2 svc2.example.com. alpn=h2
+www.example.com. 300 IN HTTPS 1 svc1.example.com. alpn=h2,h3 ech=...
+www.example.com. 300 IN HTTPS 2 svc2.example.com. alpn=h2
 ~~~
 
-The highest-priority RR (priority 1) contains `h3` in ALPN. The proxy closes:
+The highest-priority RR (priority 1) contains `h3` in ALPN. The proxy cancels
+making the connect request:
 
 ~~~ example
 HEADERS
 :status = 307
-proxy-dns-svcb-response-closed-on: h3-alpn
+proxy-dns-svcb-response-cancelled-on: h3-alpn
 proxy-dns-svcb-response: :AAEGYW...:, :AAIHc3...:
 ~~~
 
-The client retries with CONNECT-UDP using the original authority. The proxy
-re-resolves and connects to the highest-priority RR's target:
+The client retries with CONNECT-UDP using the Selected TargetName
+of the Selected Endpoint. The proxy re-resolves and connects
+this new Proxy Target requested by the client:
 
 ~~~ example
 HEADERS
-:method = CONNECT-UDP
-:authority = svc.example.com:443
+:method = CONNECT
+:protocol = connect-udp
+:scheme = https
+:path = /.well-known/masque/udp/svc1.example.com/443/
+:authority = proxy.example
+capsule-protocol = ?1
 ~~~
 
 The proxy establishes the connection and responds:
@@ -416,50 +554,71 @@ The proxy establishes the connection and responds:
 ~~~ example
 HEADERS
 :status = 200
+proxy-status: proxy.example; next-hop="2001:db8:a::c"
 ~~~
 
-## AliasMode and Close-On
+Note that even if the proxy had been instructed to cancel making
+the CONNECT request, it still would not have been usable by
+the client as neither TargetName (`svc1.example.com` nor `svc2.example.com`)
+matches the Proxy Target (`www.example.com`).
 
-The client sends CONNECT requesting SVCB information with both close-on conditions:
+
+## AliasMode and Cancel-On
+
+The client sends CONNECT requesting SVCB information with both cancel-on conditions:
 
 ~~~ example
 HEADERS
 :method = CONNECT
-:authority = svc.example.com:443
-proxy-dns-svcb-request: ?1
-proxy-dns-svcb-request-close-on: h3-alpn, ech-defined
+:authority = www.example.com:443
+proxy-dns-svcb-request: HTTPS
+proxy-dns-svcb-request-cancel-on: h3-alpn, ech-defined
 ~~~
 
-The proxy resolves `svc.example.com` and encounters an AliasMode RR:
+The proxy resolves `www.example.com` and encounters an AliasMode RR:
 
 ~~~ dns
-svc.example.com. 300 IN HTTPS 0 cdn.example.net.
+www.example.com. 300 IN HTTPS 0 cdn.example.
 ~~~
 
-The proxy follows the alias and resolves `cdn.example.net`:
+The proxy follows the alias and resolves `cdn.example`
+which is an alias to `cdn2.example.net`:
 
 ~~~ dns
-cdn.example.net. 300 IN HTTPS 1 cdn.example.net. alpn=h2,h3 ech=...
+cdn.example.      900 IN CNAME cdn2.example.net.
+cdn2.example.net. 300 IN HTTPS 1 . alpn=h2,h3 ech=...
 ~~~
 
-Both `h3-alpn` and `ech-defined` conditions are satisfied. The proxy closes
-and returns both the AliasMode RR for `svc.example.com` and the terminal
-ServiceMode RR for `cdn.example.net` in "Proxy-DNS-SVCB-Response":
+Both `h3-alpn` and `ech-defined` conditions are satisfied. The proxy cancels
+and returns both the AliasMode RR for `www.example.com`,
+the CNAME for `cdn.example`, and the terminal
+ServiceMode RR for `cdn2.example.net` in "Proxy-DNS-SVCB-Response":
 
 ~~~ example
 HEADERS
 :status = 307
-proxy-dns-svcb-response-closed-on: h3-alpn, ech-defined
-proxy-dns-svcb-response: :AAAGYW...:, :AAEGYW...:
+proxy-dns-svcb-response-cancelled-on: h3-alpn, ech-defined
+proxy-dns-svcb-response: :AAAGYW...:, :AAEGYW..., :AAEGYW...:
+~~~
+
+Where the "proxy-dns-svcb-response" contains all three RRs:
+
+~~~ dns
+www.example.com. 300 IN HTTPS 0 cdn.example.
+cdn.example.      900 IN CNAME cdn2.example.net.
+cdn2.example.net. 300 IN HTTPS 1 . alpn=h2,h3 ech=...
 ~~~
 
 The client retries with CONNECT-UDP, using ECH with the keys from the response:
 
 ~~~ example
 HEADERS
-:method = CONNECT-UDP
-:authority = cdn.example.net:443
-proxy-dns-svcb-request: ?1
+:method = CONNECT
+:protocol = connect-udp
+:scheme = https
+:path = /.well-known/masque/udp/cdn2.example.net/443/
+:authority = proxy.example
+capsule-protocol = ?1
 ~~~
 
 The proxy establishes the connection and responds:
@@ -467,15 +626,125 @@ The proxy establishes the connection and responds:
 ~~~ example
 HEADERS
 :status = 200
-proxy-dns-svcb-response: :AAEGYW...:
+proxy-status: proxy.example; next-hop="2001:db8:a::c"
 ~~~
 
+Over this connection the client establishes its HTTP/3 HTTPS connection
+to `www.example.com`.
+
+## Cancel-On and HTTP connections to insecure port 80
+
+The client sends CONNECT requesting HTTPS RRs
+information with only the cancel-on for `https`:
+
+~~~ example
+HEADERS
+:method = CONNECT
+:authority = www.example.com:80
+proxy-dns-svcb-request: HTTPS
+proxy-dns-svcb-request-cancel-on: https
+~~~
+
+The proxy resolves `www.example.com` and encounters
+that it has a CNAME to a CDN which has an HTTPS RR:
+
+~~~ dns
+www.example.com. 3600 IN CNAME cdn.example.
+cdn.example.      600 IN HTTPS 1 . alpn=h2 ech=...
+~~~
+
+Because the `https` condition is satisfied, the proxy cancels
+and returns both DNS RRs in "Proxy-DNS-SVCB-Response":
+
+~~~ example
+HEADERS
+:status = 307
+proxy-dns-svcb-response-cancelled-on: https
+proxy-dns-svcb-response: :AAAGYW...:, :AAEGYW...
+~~~
+
+The client retries the CONNECT but this time to port 443 for HTTPS,
+using ECH with the keys from the response, and makes the connection
+to the TargetName from the HTTPS record:
+
+~~~ example
+HEADERS
+:method = CONNECT
+:authority = cdn.example:443
+~~~
+
+The proxy establishes the connection and responds:
+
+~~~ example
+HEADERS
+:status = 200
+proxy-status: proxy.example; next-hop="2001:db8:a::c"
+~~~
+
+Over this connection the client establishes its HTTP/2 HTTPS connection
+to `www.example.com` with ECH configuration from the HTTPS RR.
+
+
+
 # Security Considerations
+
+## Client Trust of Proxy
+
+As the client is relying on the proxy to resolve the SVCB and HTTPS
+DNS records for it, the client is trusting the proxy as if it was a recursive
+DNS resolver for the client. By omitting or modifying
+SVCB/HTTPS RRs, the proxy could prevent the client from using ECH
+thus exposing the TLS SNI to the proxy. The proxy could also omit
+HTTPS RRs.
+
+## Proxies Not Supporting Proxy-DNS-SVCB-Request-Cancel-On
+
+If a client assumes that a proxy supports Proxy-DNS-SVCB-Request-Cancel-On
+(or assumes it supports a given attribute), the client might end up having
+the proxy establish a connection where it would have preferred one
+not be created. This would be of particular concern if the client
+pipelined DATA frames with payload (eg, the ClientHello with
+a cleartext TLS SNI) if it was assuming the proxy would cancel
+in the case of ECH being present.
+
+Clients MUST NOT rely on "Proxy-DNS-SVCB-Request-Cancel-On" with `ech-defined`
+for sending H/2 or H/3 DATA frames along with the CONNECT request unless
+they have an out-of-band way of ensuring this is supported by the Proxy.
+
+## Reuse of HTTP connections to the proxy
+
+While "Proxy-DNS-SVCB-Request-Cancel-On" allows the connection to an
+HTTP/1.1 proxy to be reused for issuing a subsequent CONNECT or CONNECT-UDP
+request, this does have risks for HTTP Request Smuggling and request
+framing confusion. Clients SHOULD NOT reuse a connection to an HTTP/1.1
+proxy after making the initial cancelled CONNECT request and instead
+use a fresh connection to the proxy.
+
+## Lack of DNSSEC signal
+
+The DNS RRs returned in "Proxy-DNS-SVCB-Response" do not contain
+information about whether the proxy performed DNSSEC validation
+of the DNS responses, nor does it contain enough information
+for the client to perform DNSSEC validation itself.
+
+Clients with security or privacy needs relying on DNSSEC SHOULD NOT use
+this mechanism and instead should use a separate secure connection
+to a DNS resolver for obtaining HTTPS/SVCB RRs along with DNSSEC proofs.
+
+\[TODO: Explore ways for the Proxy to signal DNSSEC information.
+Options include:
+1) Proxy returns the DNS "AD" flag as part of "Proxy-DNS-SVCB-Response
+2) Client adds a "dnssec" attribute to "Proxy-DNS-SVCB-Request"
+   which prompts the proxy to include ALL records needed by the client
+   to validate DNSSEC proofs as part of the "Proxy-DNS-SVCB-Response" header
+   field (which could be quite large).
+\]
+
 
 ## Privacy of Client Preferences
 
 The "Proxy-DNS-SVCB-Request" header field reveals that the client is interested
-in SVCB information for the target. The "Proxy-DNS-SVCB-Request-Close-On" header
+in SVCB information for the target. The "Proxy-DNS-SVCB-Request-Cancel-On" header
 field further reveals the client's connection strategy preferences.
 
 # IANA Considerations
@@ -490,12 +759,12 @@ Transfer Protocol (HTTP) Field Name Registry" defined in Section 16.3.1 of
 |---|---|
 | Proxy-DNS-SVCB-Request | permanent |
 | Proxy-DNS-SVCB-Response | permanent |
-| Proxy-DNS-SVCB-Request-Close-On | permanent |
-| Proxy-DNS-SVCB-Response-Closed-On | permanent |
+| Proxy-DNS-SVCB-Request-Cancel-On | permanent |
+| Proxy-DNS-SVCB-Response-Cancelled-On | permanent |
 
-## Proxy-DNS-SVCB-Request-Close-On Token Registry
+## Proxy-DNS-SVCB-Request-Cancel-On Token Registry
 
-This document establishes a new "Proxy-DNS-SVCB-Request-Close-On Tokens"
+This document establishes a new "Proxy-DNS-SVCB-Request-Cancel-On Tokens"
 registry. The registration policy is Specification Required ({{!RFC8126}}).
 
 Initial entries:
@@ -504,6 +773,7 @@ Initial entries:
 |---|---|---|
 | h3-alpn | ALPN contains "h3" in highest-priority RR | This document |
 | ech-defined | ECH SvcParamKey present in highest-priority RR | This document |
+| https | HTTPS DNS RR is present indicating HSTS-like behavior | This document |
 
 --- back
 
