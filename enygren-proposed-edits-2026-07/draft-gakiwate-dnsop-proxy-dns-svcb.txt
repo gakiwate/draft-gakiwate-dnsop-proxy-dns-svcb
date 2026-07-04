@@ -120,18 +120,18 @@ Table of Contents
 
 1.  Introduction
 
-   The CONNECT method [RFC9110] and the CONNECT-UDP method [RFC9298]
-   allow HTTP clients to establish TCP or UDP flows to target servers
-   through an HTTP proxy.  The client identifies the Proxy Target using
-   authority-form (in [RFC9110]), or a URI Template [RFC6570] for
-   CONNECT-UDP.  The Proxy Target includes a The CONNECT method
-   [RFC9110] and UDP proxying ("connect-udp", defined in [RFC9298])
-   allow HTTP clients to establish TCP or UDP flows to target servers
-   through an HTTP proxy.  The client identifies the Proxy Target using
-   authority-form (in [RFC9110]), or a URI Template [RFC6570] for UDP
-   proxying.  The Proxy Target includes a server name or IP address and
-   a port number.  When the Proxy Target is a name, the proxy resolves
-   it to an IP address using A or AAAA queries.
+   The CONNECT method [RFC9110] and UDP proxying [RFC9298] via Extended
+   CONNECT allow HTTP clients to establish TCP or UDP flows to target
+   servers through an HTTP proxy.  The client identifies the Proxy
+   Target using authority-form (in [RFC9110]), or a URI Template
+   [RFC6570] for CONNECT-UDP.  The Proxy Target includes a The CONNECT
+   method [RFC9110] and UDP proxying ("connect-udp", defined in
+   [RFC9298]) allow HTTP clients to establish TCP or UDP flows to target
+   servers through an HTTP proxy.  The client identifies the Proxy
+   Target using authority-form (in [RFC9110]), or a URI Template
+   [RFC6570] for UDP proxying.  The Proxy Target includes a server name
+   or IP address and a port number.  When the Proxy Target is a name,
+   the proxy resolves it to an IP address using A or AAAA queries.
 
    This arrangement prevents the client from accessing Service Binding
    (SVCB and HTTPS) resource records [RFC9460] for the target.  SVCB
