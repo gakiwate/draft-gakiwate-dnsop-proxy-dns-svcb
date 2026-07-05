@@ -1,0 +1,288 @@
+{
+  "magic": "E!vIA5L86J2I",
+  "timestamp": "2026-07-05T01:43:19.850567+00:00",
+  "repo": "gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb",
+  "labels": [
+    {
+      "name": "bug",
+      "description": "Something isn't working",
+      "color": "d73a4a"
+    },
+    {
+      "name": "documentation",
+      "description": "Improvements or additions to documentation",
+      "color": "0075ca"
+    },
+    {
+      "name": "duplicate",
+      "description": "This issue or pull request already exists",
+      "color": "cfd3d7"
+    },
+    {
+      "name": "enhancement",
+      "description": "New feature or request",
+      "color": "a2eeef"
+    },
+    {
+      "name": "good first issue",
+      "description": "Good for newcomers",
+      "color": "7057ff"
+    },
+    {
+      "name": "help wanted",
+      "description": "Extra attention is needed",
+      "color": "008672"
+    },
+    {
+      "name": "invalid",
+      "description": "This doesn't seem right",
+      "color": "e4e669"
+    },
+    {
+      "name": "question",
+      "description": "Further information is requested",
+      "color": "d876e3"
+    },
+    {
+      "name": "wontfix",
+      "description": "This will not be worked on",
+      "color": "ffffff"
+    }
+  ],
+  "issues": [],
+  "pulls": [
+    {
+      "number": 1,
+      "id": "PR_kwDOQOhbVs7tod2K",
+      "title": "Multiple updates from Erik Nygren.",
+      "url": "https://github.com/gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb/pull/1",
+      "state": "MERGED",
+      "author": "enygren",
+      "authorAssociation": "COLLABORATOR",
+      "assignees": [],
+      "labels": [],
+      "body": "- Change Proxy-DNS-SVCB-Request to take the RR type to resolve (HTTPS or SVCB) as well as an optional name= which is commonly needed for SVCB.  Update examples to show a mix of HTTPS RR and SVCB RR usage.\r\n\r\n- Reintroduce the recommendation to include the Proxy-Status header field. (Future TODO: we should add an example for matching the next-hop-aliases to the TargetName.)\r\n\r\n- Update description and examples for CONNECT-UDP to match RFC\r\n\r\n- Explain how client can determine if a connection is reusable (ie, by looking at the TargetName).\r\n\r\n- Rename Close-On/Closed-On to Cancel-On/Cancelled-On since the proxy didn't make (or shouldn't have made) a connection in the first place so there's nothing to close.  I also considered \"Abort\" and \"Skip\" but \"Cancel\" seemed both clear and to not have the Inclusive Language issues associated with \"Abort\".\r\n\r\n- Added the \"https\" token for Proxy-DNS-Request-Cancel-On for cancelling port 80 connections when an HTTPS RR is present to enable the HSTS behavior. (This has the potential to be compelling use-case for some people.) Add an example for this case.\r\n\r\n- Added multiple additional Security Considerations covering\r\n\r\n- Added myself as a co-author",
+      "createdAt": "2026-07-03T14:49:31Z",
+      "updatedAt": "2026-07-04T07:17:01Z",
+      "baseRepository": "gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb",
+      "baseRefName": "main",
+      "baseRefOid": "a06b557a64a2673baa14e5f28e1d39231407de1e",
+      "headRepository": "gakiwate/draft-gakiwate-dnsop-proxy-dns-svcb",
+      "headRefName": "enygren-proposed-edits-2026-07",
+      "headRefOid": "0634c404d40ef5768fc0a6f5e0d7af88f79e3575",
+      "closedAt": "2026-07-04T07:17:01Z",
+      "mergedAt": "2026-07-04T07:17:01Z",
+      "mergedBy": "gakiwate",
+      "mergeCommit": {
+        "oid": "f619a0313b8ffada7f3b3270f8efbb89a469428c"
+      },
+      "comments": [
+        {
+          "author": "tfpauly",
+          "authorAssociation": "COLLABORATOR",
+          "body": "Rendered view: https://gakiwate.github.io/draft-gakiwate-dnsop-proxy-dns-svcb/enygren-proposed-edits-2026-07/draft-gakiwate-dnsop-proxy-dns-svcb.html",
+          "createdAt": "2026-07-03T21:35:51Z",
+          "updatedAt": "2026-07-03T21:35:51Z"
+        }
+      ],
+      "reviews": [
+        {
+          "id": "PRR_kwDOQOhbVs8AAAABE9Ew3g",
+          "commit": {
+            "abbreviatedOid": "08cb70f"
+          },
+          "author": "gakiwate",
+          "authorAssociation": "OWNER",
+          "state": "APPROVED",
+          "body": "Thanks for the PR and makes for a great draft-00. My suggestions are mostly nits and fixing typos.\n\nI like the renaming to Cancel-On/Cancelled-On. We might have to update some language to be consistent with \"cancelling\" as opposed to \"closing\" around that but that is not urgent. \n\nWelcome to the draft! :) ",
+          "createdAt": "2026-07-03T18:05:09Z",
+          "updatedAt": "2026-07-03T18:41:48Z",
+          "comments": [
+            {
+              "originalPosition": 66,
+              "body": "```suggestion\nIf the header field is absent, the client is not requesting DNS SVCB\n```",
+              "createdAt": "2026-07-03T18:05:09Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 684,
+              "body": "```suggestion\nthey have an out-of-band way of ensuring this is supported by the Proxy.\n```",
+              "createdAt": "2026-07-03T18:17:32Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 415,
+              "body": "```suggestion\nproxy-dns-svcb-request: SVCB;name=\"_8000._foo.svc.example.com\"\n```",
+              "createdAt": "2026-07-03T18:29:20Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 558,
+              "body": "```suggestion\nand returns both the AliasMode RR for `www.example.com`,\n```",
+              "createdAt": "2026-07-03T18:30:04Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 137,
+              "body": "```suggestion\nto establish the connection (ie, via CONNECT or CONNECT-UDP),\n```",
+              "createdAt": "2026-07-03T18:31:19Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 110,
+              "body": "```suggestion\nreturn a `Proxy-Status` header field ({{!RFC9209}}) to return a `next-hop` parameter\n```",
+              "createdAt": "2026-07-03T18:32:24Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 171,
+              "body": "```suggestion\n- SHOULD include the `Proxy-Status` header field with both the\n```",
+              "createdAt": "2026-07-03T18:33:01Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 113,
+              "body": "```suggestion\nand if it is compatible with a given Selected Endpoint.\n```",
+              "createdAt": "2026-07-03T18:34:03Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 149,
+              "body": "```suggestion\nthe client SHOULD continue to use it as the Selected Endpoint.\n```",
+              "createdAt": "2026-07-03T18:34:50Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 403,
+              "body": "```suggestion\ninformation it needs. The client signals this by omitting the\n```",
+              "createdAt": "2026-07-03T18:35:23Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 628,
+              "body": "```suggestion\nBecause the `https` condition is satisfied, the proxy cancels\n```",
+              "createdAt": "2026-07-03T18:36:00Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            },
+            {
+              "originalPosition": 605,
+              "body": "```suggestion\n```",
+              "createdAt": "2026-07-03T18:37:24Z",
+              "updatedAt": "2026-07-03T18:41:48Z"
+            }
+          ]
+        },
+        {
+          "id": "PRR_kwDOQOhbVs8AAAABE9nMXg",
+          "commit": {
+            "abbreviatedOid": "08cb70f"
+          },
+          "author": "tfpauly",
+          "authorAssociation": "COLLABORATOR",
+          "state": "APPROVED",
+          "body": "",
+          "createdAt": "2026-07-03T20:55:06Z",
+          "updatedAt": "2026-07-03T21:11:11Z",
+          "comments": [
+            {
+              "originalPosition": 16,
+              "body": "Ah and technically connect-udp is not a method, but a protocol on extended CONNECT ",
+              "createdAt": "2026-07-03T20:55:06Z",
+              "updatedAt": "2026-07-03T21:11:11Z"
+            },
+            {
+              "originalPosition": 38,
+              "body": "```suggestion\n  or in a URI Template (for UDP proxying).\n```\n",
+              "createdAt": "2026-07-03T20:56:19Z",
+              "updatedAt": "2026-07-03T21:11:11Z"
+            },
+            {
+              "originalPosition": 56,
+              "body": "Probably good to specify that this needs to be a TYPE registered in https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4",
+              "createdAt": "2026-07-03T20:57:58Z",
+              "updatedAt": "2026-07-03T21:11:11Z"
+            },
+            {
+              "originalPosition": 83,
+              "body": "```suggestion\nif it is not known to be related to the Proxy Target name.\n```\n",
+              "createdAt": "2026-07-03T20:59:25Z",
+              "updatedAt": "2026-07-03T21:11:11Z"
+            },
+            {
+              "originalPosition": 137,
+              "body": "Or update to be \"UDP proxying\" or similar ",
+              "createdAt": "2026-07-03T21:02:46Z",
+              "updatedAt": "2026-07-03T21:11:11Z"
+            }
+          ]
+        },
+        {
+          "id": "PRR_kwDOQOhbVs8AAAABE9rbbA",
+          "commit": {
+            "abbreviatedOid": "08cb70f"
+          },
+          "author": "tfpauly",
+          "authorAssociation": "COLLABORATOR",
+          "state": "COMMENTED",
+          "body": "",
+          "createdAt": "2026-07-03T21:23:14Z",
+          "updatedAt": "2026-07-03T21:24:56Z",
+          "comments": [
+            {
+              "originalPosition": 1,
+              "body": "```suggestion\nWhen HTTP clients use the CONNECT method or UDP proxying (CONNECT-UDP) to reach target servers\n```",
+              "createdAt": "2026-07-03T21:23:14Z",
+              "updatedAt": "2026-07-03T21:30:32Z"
+            },
+            {
+              "originalPosition": 22,
+              "body": "```suggestion\nThe CONNECT method {{!RFC9110}} and UDP proxying (\"connect-udp\", defined in {{!RFC9298}}) allow\nHTTP clients to establish TCP or UDP flows to target servers through an HTTP\nproxy. The client identifies the Proxy Target using authority-form (in {{!RFC9110}}),\nor a URI Template {{!RFC6570}} for UDP proxying.  The Proxy Target includes a\nserver name or IP address and a port number. When the Proxy Target is a name, the\n```",
+              "createdAt": "2026-07-03T21:24:07Z",
+              "updatedAt": "2026-07-03T21:24:56Z"
+            }
+          ]
+        },
+        {
+          "id": "PRR_kwDOQOhbVs8AAAABE9r12g",
+          "commit": {
+            "abbreviatedOid": "08cb70f"
+          },
+          "author": "tfpauly",
+          "authorAssociation": "COLLABORATOR",
+          "state": "COMMENTED",
+          "body": "",
+          "createdAt": "2026-07-03T21:26:03Z",
+          "updatedAt": "2026-07-03T21:26:03Z",
+          "comments": [
+            {
+              "originalPosition": 137,
+              "body": "```suggestion\nto establish the connection (ie, via CONNECT or UDP proxying),\n```",
+              "createdAt": "2026-07-03T21:26:03Z",
+              "updatedAt": "2026-07-03T21:26:03Z"
+            }
+          ]
+        },
+        {
+          "id": "PRR_kwDOQOhbVs8AAAABE-K-QA",
+          "commit": {
+            "abbreviatedOid": "9a6c55f"
+          },
+          "author": "enygren",
+          "authorAssociation": "COLLABORATOR",
+          "state": "COMMENTED",
+          "body": "",
+          "createdAt": "2026-07-04T01:09:26Z",
+          "updatedAt": "2026-07-04T01:09:26Z",
+          "comments": [
+            {
+              "originalPosition": 16,
+              "body": "```suggestion\nThe CONNECT method {{!RFC9110}} and UDP proxying {{!RFC9298}} via Extended CONNECT allow\n```",
+              "createdAt": "2026-07-04T01:09:26Z",
+              "updatedAt": "2026-07-04T01:09:39Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
